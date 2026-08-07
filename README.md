@@ -11,11 +11,6 @@ no external Python dependencies.
 Requires Home Assistant **2026.8.0** or newer. Supports the **v1 protocol** only
 (UDP port 4000).
 
-> **Upgrading from the `ecovent` version?** The integration domain changed from
-> `ecovent` to `nibe_dvc`, so this is a clean break: remove the old integration
-> and delete `custom_components/ecovent` before installing this one, then add it
-> again from the UI. Entity history under the old ids is not carried over.
-
 ## Installation
 
 **HACS** — add `robinostlund/homeassistant-nibe-dvc` as a custom repository with
