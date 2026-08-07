@@ -9,6 +9,15 @@
       },
       "filter": {
         "default": "mdi:air-filter"
+      },
+      "humidity_trigger": {
+        "default": "mdi:water-percent"
+      },
+      "relay_trigger": {
+        "default": "mdi:electric-switch"
+      },
+      "sensor_10v_trigger": {
+        "default": "mdi:sine-wave"
       }
     },
     "button": {
@@ -19,6 +28,14 @@
     "sensor": {
       "ssid": {
         "default": "mdi:wifi"
+      }
+    },
+    "number": {
+      "humidity_threshold": {
+        "default": "mdi:water-percent-alert"
+      },
+      "boost_run_on": {
+        "default": "mdi:timer-cog-outline"
       }
     }
   }

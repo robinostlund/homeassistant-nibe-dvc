@@ -60,6 +60,15 @@
       },
       "filter": {
         "name": "Filter"
+      },
+      "humidity_trigger": {
+        "name": "Humidity trigger"
+      },
+      "relay_trigger": {
+        "name": "External sensor"
+      },
+      "sensor_10v_trigger": {
+        "name": "Analog sensor"
       }
     },
     "button": {
@@ -70,6 +79,14 @@
     "sensor": {
       "ssid": {
         "name": "Wi-Fi network"
+      }
+    },
+    "number": {
+      "humidity_threshold": {
+        "name": "Boost humidity threshold"
+      },
+      "boost_run_on": {
+        "name": "Boost run-on time"
       }
     }
   }

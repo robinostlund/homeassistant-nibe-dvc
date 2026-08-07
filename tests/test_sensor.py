@@ -136,3 +136,52 @@ async def test_ssid_sensor_skipped_when_unreadable(
 
     assert hass.states.get(SSID) is None
     assert hass.states.get("fan.basement_fan") is not None
+
+
+HUM_TRIGGER = "binary_sensor.basement_fan_humidity_trigger"
+RELAY_TRIGGER = "binary_sensor.basement_fan_external_sensor"
+ANALOG_TRIGGER = "binary_sensor.basement_fan_analog_sensor"
+
+
+async def test_trigger_sensors_follow_enabled_inputs(
+    hass: HomeAssistant, setup_integration
+) -> None:
+    """Only inputs the installer enabled get an entity.
+
+    A disabled input would sit at "off" forever, which reads as "all clear"
+    rather than "not wired up". The test unit has humidity and relay enabled
+    and the 0-10 V input disabled.
+    """
+    assert hass.states.get(HUM_TRIGGER) is not None
+    assert hass.states.get(RELAY_TRIGGER) is not None
+    assert hass.states.get(ANALOG_TRIGGER) is None
+
+
+async def test_relay_trigger_reflects_device(
+    hass: HomeAssistant, config_entry, mock_fan: AsyncMock
+) -> None:
+    """An external sensor closing its contact shows up.
+
+    This is how a CO2 sensor wired to NO1/NO2 reports - the unit gives a
+    trigger flag, never a measured concentration.
+    """
+    mock_fan.async_update.return_value = make_state(relay_sensor_status=1)
+    config_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert hass.states.get(RELAY_TRIGGER).state == STATE_ON
+
+
+async def test_analog_trigger_created_when_enabled(
+    hass: HomeAssistant, config_entry, mock_fan: AsyncMock
+) -> None:
+    """Enabling the 0-10 V input creates its entity."""
+    from .conftest import make_config
+
+    mock_fan.async_get_config.return_value = make_config(sensor_10v=1)
+    config_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert hass.states.get(ANALOG_TRIGGER) is not None

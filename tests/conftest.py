@@ -9,7 +9,11 @@ from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.ecovent.api import EcoventNetwork, EcoventState
+from custom_components.ecovent.api import (
+    EcoventConfig,
+    EcoventNetwork,
+    EcoventState,
+)
 from custom_components.ecovent.const import DOMAIN
 
 # Addresses come from the RFC 5737 documentation range (192.0.2.0/24), which is
@@ -40,6 +44,13 @@ def make_state(**overrides: int | None) -> EcoventState:
         "alarm_status": 0,
         "boost_mode": 0,
         "filter_eol_timer": 0,
+        # Trigger flags a real unit always reports, even when the matching
+        # input is disabled.
+        "humidity_sensor_status": 0,
+        "relay_sensor_status": 0,
+        "sensor_10v_status": 0,
+        "operation_mode": 0,
+        "sensor_10v_current_status": 0,
     }
     for key, value in overrides.items():
         if value is None:
@@ -47,6 +58,27 @@ def make_state(**overrides: int | None) -> EcoventState:
         else:
             raw[key] = value
     return EcoventState(raw=raw)
+
+
+def make_config(**overrides: int | None) -> EcoventConfig:
+    """Build an EcoventConfig matching a real unit's settings."""
+    raw: dict[str, int] = {
+        "humidity_sensor_threshold": 75,
+        "humidity_sensor": 1,
+        "relay_sensor": 1,
+        "sensor_10v": 0,
+        "night_mode_timer": 28800,
+        "party_mode_timer": 14400,
+        "deactivation_timer": 600,
+        "sensor_10v_threshold": 50,
+        "cloud_activation": 1,
+    }
+    for key, value in overrides.items():
+        if value is None:
+            raw.pop(key, None)
+        else:
+            raw[key] = value
+    return EcoventConfig(raw=raw)
 
 
 @pytest.fixture(autouse=True)
@@ -66,6 +98,13 @@ def mock_fan():
     fan.async_set_airflow.return_value = make_state(airflow=1)
     fan.async_set_power.return_value = make_state()
     fan.async_reset_filter_timer.return_value = make_state(filter_eol_timer=0)
+    fan.async_get_config.return_value = make_config()
+    fan.async_set_humidity_threshold.return_value = make_config(
+        humidity_sensor_threshold=60
+    )
+    fan.async_set_deactivation_delay.return_value = make_config(
+        deactivation_timer=1800
+    )
     fan.async_get_network.return_value = EcoventNetwork(
         ssid="test-wifi", ip_address=TEST_HOST
     )

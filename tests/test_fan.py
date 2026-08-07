@@ -286,3 +286,33 @@ async def test_unload(hass: HomeAssistant, setup_integration) -> None:
     await hass.async_block_till_done()
 
     assert hass.states.get(ENTITY_ID).state == STATE_UNAVAILABLE
+
+
+async def test_percentage_is_100_while_boosting(
+    hass: HomeAssistant, config_entry, mock_fan: AsyncMock
+) -> None:
+    """Boost runs the unit at maximum speed while `speed` still reads low.
+
+    The manual is explicit that a triggered sensor drives the unit to maximum
+    speed and it returns to the *previous* speed afterwards, so the speed
+    parameter keeps reporting the configured step throughout. Reporting 33%
+    while the fan is flat out would be wrong.
+    """
+    mock_fan.async_update.return_value = make_state(speed=1, boost_mode=1)
+    config_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert hass.states.get(ENTITY_ID).attributes[ATTR_PERCENTAGE] == 100
+
+
+async def test_percentage_is_100_during_boost_run_on(
+    hass: HomeAssistant, config_entry, mock_fan: AsyncMock
+) -> None:
+    """Boost value 2 is the run-on countdown, still at maximum speed."""
+    mock_fan.async_update.return_value = make_state(speed=1, boost_mode=2)
+    config_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert hass.states.get(ENTITY_ID).attributes[ATTR_PERCENTAGE] == 100

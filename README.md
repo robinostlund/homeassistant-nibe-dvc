@@ -39,7 +39,32 @@ re-adding it, so entities and history survive.
 | Alarm | `binary_sensor` | Diagnostic |
 | Boost mode | `binary_sensor` | Diagnostic |
 | Wi-Fi network | `sensor` | Diagnostic — the SSID the unit is joined to |
+| Humidity trigger | `binary_sensor` | Diagnostic — humidity is over the boost threshold |
+| External sensor | `binary_sensor` | Diagnostic — the NO-contact input, e.g. a wired CO2 sensor |
+| Analog sensor | `binary_sensor` | Diagnostic — the 0-10 V input, if enabled |
+| Boost humidity threshold | `number` | Config — %RH that triggers boost (40-80) |
+| Boost run-on time | `number` | Config — how long boost continues after the trigger clears |
 | Reset filter timer | `button` | Config — press after changing the filter |
+
+### Boost
+
+A triggered sensor drives the unit to **maximum speed**, outranking Party and
+Night mode. When the trigger clears, the run-on timer counts down and only then
+does the fan return to its previous speed. Both settings are exposed as `number`
+entities, so an automation can tighten the humidity threshold at night or
+lengthen the run-on after a shower.
+
+The fan entity reports **100%** during boost. The unit's own `speed` value keeps
+reporting the *configured* step throughout, so trusting it alone would show 33%
+while the fan is flat out.
+
+### CO2
+
+There is no built-in CO2 sensor and no ppm reading. A CO2 sensor is an external
+accessory wired to the NO-contact input (any model) or the 0-10 V input
+(DVC 10-50W(L) only); the unit reports only that the threshold was crossed. It
+appears as the **External sensor** or **Analog sensor** binary sensor, and it
+triggers boost exactly like the built-in humidity sensor.
 
 Entities are only created for parameters the unit actually reports.
 

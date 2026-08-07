@@ -59,9 +59,15 @@ the encoding:
 | `0x04 <1-3>` | set speed step | yes |
 | `0x05 <22-255>` | set manual speed, switches unit to manual (speed reads 4) | **no** |
 | `0x06 <0-2>` | set airflow: ventilation / heat recovery / air supply | yes |
-| `0x0B <n>` | set humidity threshold | **no** |
+| `0x0B <n>` | set humidity threshold, 40-80 %RH | **no** |
+| `0x11 <3 bytes>` | set boost run-on delay, big-endian seconds, 0-24 h | **no** |
 | `0x15 <0-1>` | enable/disable humidity sensor | no |
+| `0x16 <0-1>` | enable/disable external NO-contact input | no |
 | `0x1E 0x00` | **reset the filter replacement timer** | yes |
+
+**Payloads are not limited to one byte.** `0x11 00 03 84` sets the run-on delay
+to 900 s and is confirmed by re-reading the config frame. This is what makes the
+3-byte timers writable at all.
 
 ### Three things that will bite you
 
@@ -105,18 +111,32 @@ length-prefixed strings:
 
 ## No temperature sensor
 
-There is **no temperature parameter in the v1 protocol**, which is worth
-recording because a heat recovery unit plausibly ought to have one.
+There is **no temperature reading in the v1 protocol on this family of unit**,
+which is worth recording because a heat recovery unit plausibly ought to have
+one. Two independent lines of evidence:
 
-Every command byte `0x00`-`0x40` was swept while diffing the status and config
-frames after each probe. The result: three read commands (`0x01`, `0x02`,
-`0x24`), a handful of writes, and everything else silent. Both device frames
-parse to an exact byte fit with no spare room, so nothing is hiding in them.
-`0x07` — the obvious gap next to humidity at `0x08` — is silent for every value.
+**1. The v2 protocol documentation says this family has none.** The
+[ecovent_v2 protocol notes](https://github.com/gody01/ecovent_v2/blob/main/protocol.md)
+place temperature at parameters `0x001E`-`0x0022`, but only for the **Freshbox /
+Micra** (`0x0200`) and **Breezy / Freshpoint** (`0x1100`-`0x1800`) families —
+units that have a reheater or a room controller. The **Vento Expert / TwinFresh
+Expert** family (`0x0300`, `0x0400`, `0x0500`), which is what the NIBE DVC 10 is,
+has no temperature rows at all. Even the far richer v2 protocol exposes no
+temperature for these units, because the hardware has no sensor: they recover
+heat with a ceramic regenerator reversing on a timer, not by modulating on
+measured temperature.
 
-The NIBE DVC 10 recovers heat with a ceramic regenerator and reverses the fan on
-a timer rather than modulating on measured temperature, so it likely has no
-temperature sensor to report.
+Note the v2 temperature ids collide numerically with v1's *network* parameters
+(`0x20` SSID, `0x21` password, `0x22`, `0x23` IP). That is a coincidence of two
+unrelated numbering schemes, not a mapping — do not read v2 ids into v1 frames.
+
+**2. An exhaustive sweep found nothing.** Every command byte `0x00`-`0xFF` was
+probed while diffing the status, config and network frames after each one. The
+result: three read commands (`0x01`, `0x02`, `0x24`), a handful of writes, and
+everything else silent. All three frames parse to an exact byte fit with no
+spare room. `0x07` — the obvious gap next to humidity at `0x08` — is silent for
+every one of 22 values tried, and none of the read commands page on their value
+byte.
 
 ## Status parameters
 
@@ -149,16 +169,39 @@ threshold 0 -> 75 :  humidity_sensor_triggered 1->0,  boost 1->2
 power cycle       :  boost 2->0
 ```
 
-Two open questions:
+The DVC 10 manual settles what the probing could only suggest:
 
-- **`speed` does not change while boost is active.** It keeps reporting the
-  configured step, so a client that derives a percentage from `speed` will
-  under-report actual airflow during boost.
-- **`boost` takes at least three values (0, 1, 2).** `2` appears to be a
-  post-boost run-on or lockout. It persisted for 90 s and was then cleared by a
-  power cycle — but the `deactivation_timer` reads **600 s (10 min)**, so it very
-  likely would have cleared on its own had the observation run longer. The
-  integration treats the value as a boolean, so `2` currently reports as "on".
+- The unit goes to **maximum speed** when a sensor trips, and boost **outranks
+  Party and Night mode**.
+- When the trigger clears, the **turn-off delay timer** (`0x11`,
+  *frånslagsfördröjningstimer*) counts down and only then does the fan return to
+  its *previous* speed. Range **0 to 24 hours, default 30 minutes**.
+- Because it returns to the *previous* speed, `speed` keeps reporting the
+  configured step for the whole boost. A client deriving a percentage from
+  `speed` alone under-reports actual airflow — the integration returns 100 %
+  whenever `boost` is non-zero.
+- That also explains `boost = 2`: it is the run-on countdown, during which the
+  fan is **still at maximum speed**. So treating any non-zero value as
+  "boosting" is correct, and the earlier power cycle was unnecessary — the test
+  unit's delay is 600 s and only 90 s had elapsed.
+
+Three inputs can trigger boost, each independently enableable:
+
+| Input | Enable | Threshold | Triggered flag |
+| --- | --- | --- | --- |
+| Built-in humidity sensor | `0x15` | `0x0B` (40-80 %RH) | `0x13` |
+| External NO contact | `0x16` | — (contact closes) | `0x0D` |
+| External 0-10 V analog | `0x17` | `0x19` | `0x1A` |
+
+## CO2 sensing
+
+The DVC 10 has **no built-in CO2 sensor and reports no CO2 concentration**. The
+manual lists a CO2 sensor only as an *external* accessory wired to one of the
+two trigger inputs above — the NO contact (any model) or the 0-10 V analog input
+(DVC 10-50W(L) only). Either way the unit reports a single "threshold exceeded"
+flag, never a ppm value, so there is nothing to expose as a measurement. A wired
+CO2 sensor shows up as the **External sensor** or **Analog sensor** binary
+sensor.
 
 ## Behaviour notes
 
@@ -168,3 +211,9 @@ Two open questions:
   timeout with 3 retries purely to ride out lost UDP packets.
 - Unreachable hosts surface as ICMP port unreachable on a connected UDP socket,
   so failure is immediate rather than waiting for the timeout.
+- **The unit occasionally answers with the wrong frame type.** During sweeping, a
+  `0x24` request came back with a status frame; the next read was correct. A
+  client must therefore not assume the reply matches the request. This one is
+  handled safely by accident of design: a status parse of a network frame hits
+  the unknown parameter `0x23` immediately, decodes nothing, and raises
+  `EcoventProtocolError`, which the retry loop treats as a lost packet.

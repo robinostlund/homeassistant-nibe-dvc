@@ -41,6 +41,7 @@ RESPONSE_HEADER = b"master"
 _HEADER_LEN = len(RESPONSE_HEADER)
 
 CMD_STATUS = 0x01
+CMD_CONFIG = 0x02
 CMD_TOGGLE_POWER = 0x03
 CMD_SPEED = 0x04
 CMD_MANUAL_SPEED = 0x05
@@ -80,6 +81,22 @@ AIRFLOW_AIR_SUPPLY = 2
 # entity, since the range is not derivable from anything else.
 MIN_MANUAL_SPEED = 22
 MAX_MANUAL_SPEED = 255
+
+# Writable config parameters. Both are applied *silently* -- the unit sends no
+# reply, so the caller must re-read the config frame to confirm.
+CMD_HUMIDITY_THRESHOLD = 0x0B
+CMD_DEACTIVATION_DELAY = 0x11
+
+# Relative humidity at which the built-in sensor puts the unit into boost. The
+# unit's own DIP switch offers 40/50/60/70/80; the protocol accepts anything in
+# between.
+MIN_HUMIDITY_THRESHOLD = 40
+MAX_HUMIDITY_THRESHOLD = 80
+
+# How long the unit stays at maximum speed after the trigger clears, in seconds.
+# The manual gives 0 to 24 hours, default 30 minutes.
+MIN_DEACTIVATION_DELAY = 0
+MAX_DEACTIVATION_DELAY = 24 * 60 * 60
 
 # Wire parameter id -> (payload length in bytes, name).
 # The payload length is what lets us walk the frame, so an unknown id means we
@@ -175,8 +192,36 @@ class EcoventState:
 
     @property
     def boost_mode(self) -> bool | None:
-        """Return whether boost mode is active."""
+        """Return whether the unit is running at maximum speed on a trigger.
+
+        Takes at least three values: 0 idle, 1 a sensor is currently over its
+        threshold, 2 the trigger has cleared and the run-on delay is counting
+        down. The unit stays at maximum speed for both 1 and 2, so treating any
+        non-zero value as "boosting" is correct.
+        """
         value = self.raw.get("boost_mode")
+        return None if value is None else bool(value)
+
+    @property
+    def humidity_trigger(self) -> bool | None:
+        """Return whether the built-in humidity sensor is above its threshold."""
+        value = self.raw.get("humidity_sensor_status")
+        return None if value is None else bool(value)
+
+    @property
+    def relay_trigger(self) -> bool | None:
+        """Return whether the external NO-contact input is closed.
+
+        This is where an external CO2 or VOC sensor wired to NO1/NO2 shows up --
+        the unit reports only that the contact tripped, never a measured value.
+        """
+        value = self.raw.get("relay_sensor_status")
+        return None if value is None else bool(value)
+
+    @property
+    def sensor_10v_trigger(self) -> bool | None:
+        """Return whether the external 0-10 V input is above its threshold."""
+        value = self.raw.get("sensor_10v_status")
         return None if value is None else bool(value)
 
     @property
@@ -188,6 +233,54 @@ class EcoventState:
         """
         value = self.raw.get("filter_eol_timer")
         return None if value is None else bool(value)
+
+
+@dataclass(frozen=True, slots=True)
+class EcoventConfig:
+    """Decoded configuration frame (CMD_CONFIG).
+
+    These are the settings the unit keeps but does not repeat in its status
+    frame, most importantly the two that govern boost.
+    """
+
+    raw: dict[str, int]
+
+    @property
+    def humidity_threshold(self) -> int | None:
+        """Return the %RH above which the unit boosts to maximum speed."""
+        return self.raw.get("humidity_sensor_threshold")
+
+    @property
+    def deactivation_delay(self) -> int | None:
+        """Return how long boost runs on after the trigger clears, in seconds."""
+        return self.raw.get("deactivation_timer")
+
+    @property
+    def humidity_sensor_enabled(self) -> bool | None:
+        """Return whether the built-in humidity sensor can trigger boost."""
+        value = self.raw.get("humidity_sensor")
+        return None if value is None else bool(value)
+
+    @property
+    def relay_sensor_enabled(self) -> bool | None:
+        """Return whether the external NO-contact input can trigger boost."""
+        value = self.raw.get("relay_sensor")
+        return None if value is None else bool(value)
+
+    @property
+    def sensor_10v_enabled(self) -> bool | None:
+        """Return whether the external 0-10 V input can trigger boost."""
+        value = self.raw.get("sensor_10v")
+        return None if value is None else bool(value)
+
+
+def parse_config_response(data: bytes) -> EcoventConfig:
+    """Decode a CMD_CONFIG reply.
+
+    Shares the parameter table and framing with the status frame, so the same
+    walk works; only the wrapper type differs.
+    """
+    return EcoventConfig(raw=parse_response(data).raw)
 
 
 @dataclass(frozen=True, slots=True)
@@ -344,6 +437,29 @@ class EcoventFan:
         async with self._lock:
             return await self._exchange_locked(command, value, parser)
 
+    async def _write_silent_locked(self, command: int, payload: bytes) -> None:
+        """Send a command the unit applies without replying.
+
+        Config writes such as the humidity threshold and the deactivation delay
+        take effect but send nothing back, so there is nothing to wait for and
+        nothing to retry against. The caller must re-read to confirm.
+        """
+        packet = REQUEST_HEADER + bytes([command]) + payload + REQUEST_FOOTER
+        loop = asyncio.get_running_loop()
+        transport = None
+        try:
+            transport, _ = await loop.create_datagram_endpoint(
+                _EcoventProtocol, remote_addr=(self._host, self._port)
+            )
+            transport.sendto(packet)
+        except OSError as err:
+            raise EcoventConnectionError(
+                f"Error talking to {self._host}:{self._port}: {err}"
+            ) from err
+        finally:
+            if transport is not None:
+                transport.close()
+
     async def _exchange_locked(
         self,
         command: int,
@@ -425,6 +541,44 @@ class EcoventFan:
         if not AIRFLOW_VENTILATION <= airflow <= AIRFLOW_AIR_SUPPLY:
             raise ValueError(f"Airflow must be 0-2, got {airflow}")
         return await self._exchange(CMD_AIRFLOW, airflow)
+
+    async def async_get_config(self) -> EcoventConfig:
+        """Read the settings that do not appear in the status frame."""
+        return await self._exchange(CMD_CONFIG, 0x00, parse_config_response)
+
+    async def async_set_humidity_threshold(self, percent: int) -> EcoventConfig:
+        """Set the %RH at which the unit boosts, and return the new config."""
+        if not MIN_HUMIDITY_THRESHOLD <= percent <= MAX_HUMIDITY_THRESHOLD:
+            raise ValueError(
+                f"Humidity threshold must be {MIN_HUMIDITY_THRESHOLD}-"
+                f"{MAX_HUMIDITY_THRESHOLD}, got {percent}"
+            )
+        async with self._lock:
+            await self._write_silent_locked(
+                CMD_HUMIDITY_THRESHOLD, bytes([percent])
+            )
+            return await self._exchange_locked(
+                CMD_CONFIG, 0x00, parse_config_response
+            )
+
+    async def async_set_deactivation_delay(self, seconds: int) -> EcoventConfig:
+        """Set how long boost runs on after the trigger clears.
+
+        The value is a 3 byte big-endian second count -- the unit accepts
+        payloads longer than one byte, which is what makes the timers writable.
+        """
+        if not MIN_DEACTIVATION_DELAY <= seconds <= MAX_DEACTIVATION_DELAY:
+            raise ValueError(
+                f"Deactivation delay must be {MIN_DEACTIVATION_DELAY}-"
+                f"{MAX_DEACTIVATION_DELAY} seconds, got {seconds}"
+            )
+        async with self._lock:
+            await self._write_silent_locked(
+                CMD_DEACTIVATION_DELAY, seconds.to_bytes(3, "big")
+            )
+            return await self._exchange_locked(
+                CMD_CONFIG, 0x00, parse_config_response
+            )
 
     async def async_get_network(self) -> EcoventNetwork:
         """Read the unit's network settings.

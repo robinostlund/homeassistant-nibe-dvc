@@ -11,7 +11,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import EcoventError, EcoventFan, EcoventNetwork, EcoventState
+from .api import (
+    EcoventConfig,
+    EcoventError,
+    EcoventFan,
+    EcoventNetwork,
+    EcoventState,
+)
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
 
 if TYPE_CHECKING:
@@ -41,6 +47,7 @@ class EcoventDataUpdateCoordinator(DataUpdateCoordinator[EcoventState]):
         )
         self.fan = fan
         self.network: EcoventNetwork | None = None
+        self.config: EcoventConfig | None = None
 
     async def _async_setup(self) -> None:
         """Read the network settings once, before the first refresh.
@@ -55,11 +62,31 @@ class EcoventDataUpdateCoordinator(DataUpdateCoordinator[EcoventState]):
             _LOGGER.debug("Could not read network settings from %s: %s", self.fan.host, err)
 
     async def _async_update_data(self) -> EcoventState:
-        """Fetch the current state from the fan."""
+        """Fetch the current state and settings from the fan."""
         try:
-            return await self.fan.async_update()
+            state = await self.fan.async_update()
+            # The boost threshold and run-on delay live in the config frame,
+            # not the status frame, so both are needed every poll.
+            self.config = await self.fan.async_get_config()
         except EcoventError as err:
             raise UpdateFailed(f"Error communicating with {self.fan.host}: {err}") from err
+        return state
+
+    async def async_execute_config(
+        self, action: Callable[[], Awaitable[EcoventConfig]]
+    ) -> None:
+        """Run a config write and publish the settings it returns.
+
+        Config writes are applied silently by the unit, so the api re-reads the
+        config frame and hands back the confirmed values.
+        """
+        try:
+            self.config = await action()
+        except EcoventError as err:
+            raise HomeAssistantError(
+                f"Error communicating with {self.fan.host}: {err}"
+            ) from err
+        self.async_update_listeners()
 
     async def async_execute(
         self, action: Callable[[], Awaitable[EcoventState]]

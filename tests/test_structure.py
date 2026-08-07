@@ -61,6 +61,11 @@ def test_manifest_required_keys() -> None:
         ("binary_sensor", "filter"),
         ("button", "reset_filter"),
         ("sensor", "ssid"),
+        ("binary_sensor", "humidity_trigger"),
+        ("binary_sensor", "relay_trigger"),
+        ("binary_sensor", "sensor_10v_trigger"),
+        ("number", "humidity_threshold"),
+        ("number", "boost_run_on"),
     ],
 )
 def test_entity_translation_keys_exist(platform: str, key: str) -> None:

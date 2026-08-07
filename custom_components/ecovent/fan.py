@@ -72,6 +72,10 @@ class EcoventFanEntity(EcoventEntity, FanEntity):
             return None
         if not data.is_on:
             return 0
+        if data.boost_mode:
+            # A triggered sensor drives the unit to maximum speed while `speed`
+            # keeps reporting the configured step, so trust boost over speed.
+            return 100
 
         speed = data.speed
         if speed is not None and SPEED_RANGE[0] <= speed <= SPEED_RANGE[1]:

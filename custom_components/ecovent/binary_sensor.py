@@ -24,6 +24,8 @@ class EcoventBinarySensorEntityDescription(BinarySensorEntityDescription):
     """Describes an EcoVent binary sensor."""
 
     value_fn: Callable[[EcoventState], bool | None]
+    # Config key that must be enabled for this input to be wired up at all.
+    requires_enabled: str | None = None
 
 
 BINARY_SENSORS: tuple[EcoventBinarySensorEntityDescription, ...] = (
@@ -39,6 +41,27 @@ BINARY_SENSORS: tuple[EcoventBinarySensorEntityDescription, ...] = (
         translation_key="boost_mode",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda state: state.boost_mode,
+    ),
+    EcoventBinarySensorEntityDescription(
+        key="humidity_sensor_status",
+        translation_key="humidity_trigger",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda state: state.humidity_trigger,
+        requires_enabled="humidity_sensor",
+    ),
+    EcoventBinarySensorEntityDescription(
+        key="relay_sensor_status",
+        translation_key="relay_trigger",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda state: state.relay_trigger,
+        requires_enabled="relay_sensor",
+    ),
+    EcoventBinarySensorEntityDescription(
+        key="sensor_10v_status",
+        translation_key="sensor_10v_trigger",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda state: state.sensor_10v_trigger,
+        requires_enabled="sensor_10v",
     ),
     EcoventBinarySensorEntityDescription(
         key="filter_eol_timer",
@@ -58,11 +81,20 @@ async def async_setup_entry(
     """Set up the EcoVent binary sensors from a config entry."""
     coordinator = entry.runtime_data
     reported = coordinator.data.raw if coordinator.data is not None else {}
+    config = coordinator.config.raw if coordinator.config is not None else {}
+
+    def wanted(description: EcoventBinarySensorEntityDescription) -> bool:
+        if description.key not in reported:
+            return False
+        # An input the installer has not enabled would sit at "off" forever.
+        if description.requires_enabled is not None:
+            return bool(config.get(description.requires_enabled))
+        return True
 
     async_add_entities(
         EcoventBinarySensor(entry, description)
         for description in BINARY_SENSORS
-        if description.key in reported
+        if wanted(description)
     )
 
 
