@@ -1,0 +1,66 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add EcoVent fan",
+        "description": "Enter the address of your ventilation unit. It must be reachable on your local network.",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "name": "Name"
+        },
+        "data_description": {
+          "host": "IP address or hostname of the ventilation unit.",
+          "port": "UDP port the unit listens on. Leave at 4000 unless you changed it.",
+          "name": "Name used for the device in Home Assistant."
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure EcoVent fan",
+        "description": "Update the address of your ventilation unit, for example after it received a new IP address.",
+        "data": {
+          "host": "Host",
+          "port": "Port"
+        },
+        "data_description": {
+          "host": "IP address or hostname of the ventilation unit.",
+          "port": "UDP port the unit listens on. Leave at 4000 unless you changed it."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect. Check that the address is correct and that the unit is powered on and connected to your network.",
+      "already_configured": "This ventilation unit is already configured."
+    },
+    "abort": {
+      "already_configured": "This ventilation unit is already configured.",
+      "reconfigure_successful": "Reconfiguration was successful."
+    }
+  },
+  "entity": {
+    "fan": {
+      "ecovent": {
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "ventilation": "Ventilation",
+              "heat_recovery": "Heat recovery",
+              "air_supply": "Air supply"
+            }
+          }
+        }
+      }
+    },
+    "binary_sensor": {
+      "alarm": {
+        "name": "Alarm"
+      },
+      "boost_mode": {
+        "name": "Boost mode"
+      },
+      "filter": {
+        "name": "Filter"
+      }
+    }
+  }
+}

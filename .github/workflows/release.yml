@@ -1,0 +1,67 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Update manifest.json with tag version
+        run: |
+          # manifest version must be a plain semver (no "v" prefix)
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          VERSION="${VERSION#v}"
+          jq --arg version "$VERSION" '.version = $version' \
+            custom_components/ecovent/manifest.json > manifest.tmp
+          mv manifest.tmp custom_components/ecovent/manifest.json
+          echo "Updated manifest.json version to $VERSION"
+
+      - name: Create release zip
+        run: |
+          cd custom_components/ecovent
+          zip -r ../../ecovent.zip .
+
+      - name: Determine if prerelease
+        id: prerelease
+        run: |
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          if [[ "$VERSION" == *"-beta"* ]] || [[ "$VERSION" == *"-alpha"* ]] || [[ "$VERSION" == *"-rc"* ]]; then
+            echo "IS_PRERELEASE=true" >> $GITHUB_OUTPUT
+          else
+            echo "IS_PRERELEASE=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          IS_PRERELEASE="${{ steps.prerelease.outputs.IS_PRERELEASE }}"
+
+          if [ "$IS_PRERELEASE" = "true" ]; then
+            gh release create "$VERSION" ecovent.zip \
+              --title "$VERSION" \
+              --generate-notes \
+              --prerelease
+          else
+            gh release create "$VERSION" ecovent.zip \
+              --title "$VERSION" \
+              --generate-notes
+          fi

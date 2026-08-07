@@ -1,9 +1,14 @@
 {
-  "version": "1.0.1",
   "domain": "ecovent",
   "name": "EcoVent",
-  "documentation": "https://github.com/aglehmann/pyEcovent",
-  "dependencies": [],
-  "codeowners": ["@aglehmann"],
-  "requirements": ["pyEcovent>=0.8.3"]
+  "codeowners": [
+    "@robinostlund"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/robinostlund/home_assistant_ecovent",
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/robinostlund/home_assistant_ecovent/issues",
+  "requirements": [],
+  "version": "2.0.0"
 }

@@ -1,46 +1,45 @@
-"""Support for Ecovent Fam"""
-import logging
+"""The EcoVent integration for Vents/Blauberg TwinFresh ventilation units."""
 
-import voluptuous as vol
+from __future__ import annotations
 
-from homeassistant.const import CONF_NAME, CONF_IP_ADDRESS, CONF_PORT, CONF_DEVICES
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_HOST, CONF_PORT, Platform
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.discovery import async_load_platform
+from homeassistant.helpers.typing import ConfigType
 
-_LOGGER = logging.getLogger(__name__)
+from .api import EcoventFan
+from .const import DEFAULT_PORT, DOMAIN
+from .coordinator import EcoventDataUpdateCoordinator
 
-DOMAIN = 'ecovent'
-ECOVENT_DEVICES = 'ecovent_devices'
+PLATFORMS: list[Platform] = [
+    Platform.BINARY_SENSOR,
+    Platform.FAN,
+    Platform.SENSOR,
+]
 
-CONFIG_SCHEMA = vol.Schema({
-    DOMAIN: vol.Schema({
-        vol.Required(CONF_DEVICES, default=[]): vol.All(cv.ensure_list, [dict]),
-    })
-},extra=vol.ALLOW_EXTRA)
+type EcoventConfigEntry = ConfigEntry[EcoventDataUpdateCoordinator]
 
-async def async_setup(hass, config):
-    """Set up the Ecovent Fan component."""
-    from ecovent import Fan
+# This integration is configured entirely from the UI.
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
-    if ECOVENT_DEVICES not in hass.data:
-        hass.data[ECOVENT_DEVICES] = []
 
-    conf = config[DOMAIN]
-    conf_devices = config[DOMAIN].get(CONF_DEVICES)
-    for device in conf_devices:
-        name = device.get(CONF_NAME)
-        ip_address = device.get(CONF_IP_ADDRESS)
-
-        if device.get(CONF_PORT) is None:
-            port = 4000
-        else:
-            port = device.get(CONF_PORT)
-
-        fan = Fan(ip_address, name, port)
-        hass.data[ECOVENT_DEVICES].append(fan)
-
-    hass.async_create_task(
-        async_load_platform(hass, 'fan', DOMAIN, {CONF_NAME: DOMAIN}, config)
-    )
-
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Set up the integration; there is nothing to do for YAML."""
     return True
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: EcoventConfigEntry) -> bool:
+    """Set up EcoVent from a config entry."""
+    fan = EcoventFan(entry.data[CONF_HOST], entry.data.get(CONF_PORT, DEFAULT_PORT))
+    coordinator = EcoventDataUpdateCoordinator(hass, entry, fan)
+    await coordinator.async_config_entry_first_refresh()
+    entry.runtime_data = coordinator
+
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: EcoventConfigEntry) -> bool:
+    """Unload a config entry."""
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)

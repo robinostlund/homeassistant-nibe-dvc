@@ -1,0 +1,116 @@
+"""Tests for EcoVent setup and unload."""
+
+from __future__ import annotations
+
+from unittest.mock import AsyncMock
+
+import pytest
+
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from custom_components.ecovent.api import EcoventTimeoutError
+from custom_components.ecovent.const import DOMAIN
+
+from .conftest import TEST_HOST, TEST_NAME
+
+
+async def test_setup_entry(hass: HomeAssistant, setup_integration) -> None:
+    """The entry loads and exposes its coordinator as runtime data."""
+    assert setup_integration.state is ConfigEntryState.LOADED
+    assert setup_integration.runtime_data is not None
+
+
+async def test_setup_retries_when_unreachable(
+    hass: HomeAssistant, config_entry, mock_fan: AsyncMock
+) -> None:
+    """An unreachable fan puts the entry into retry, not a hard failure."""
+    mock_fan.async_update.side_effect = EcoventTimeoutError("no response")
+    config_entry.add_to_hass(hass)
+
+    assert not await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert config_entry.state is ConfigEntryState.SETUP_RETRY
+
+
+async def test_multiple_fans(hass: HomeAssistant, mock_fan: AsyncMock) -> None:
+    """Several units coexist as independent entries, devices and entities."""
+    entries = [
+        MockConfigEntry(
+            domain=DOMAIN,
+            title=title,
+            data={CONF_HOST: host, CONF_PORT: 4000, CONF_NAME: title},
+        )
+        for title, host in (
+            ("Basement fan", TEST_HOST),
+            ("Living room fan", "192.0.2.6"),
+            ("Attic fan", "192.0.2.7"),
+        )
+    ]
+    for entry in entries:
+        entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert len(hass.config_entries.async_entries(DOMAIN)) == 3
+    for entity_id in (
+        "fan.basement_fan",
+        "fan.living_room_fan",
+        "fan.attic_fan",
+    ):
+        assert hass.states.get(entity_id) is not None
+
+    # Each entry gets its own device, keyed on the entry id.
+    device_reg = dr.async_get(hass)
+    device_ids = {
+        device_reg.async_get_device({(DOMAIN, entry.entry_id)}).id for entry in entries
+    }
+    assert len(device_ids) == 3
+
+
+async def test_unload_one_of_many(hass: HomeAssistant, mock_fan: AsyncMock) -> None:
+    """Unloading one unit leaves the others running."""
+    first = MockConfigEntry(
+        domain=DOMAIN,
+        title=TEST_NAME,
+        data={CONF_HOST: TEST_HOST, CONF_PORT: 4000, CONF_NAME: TEST_NAME},
+    )
+    second = MockConfigEntry(
+        domain=DOMAIN,
+        title="Living room fan",
+        data={CONF_HOST: "192.0.2.6", CONF_PORT: 4000, CONF_NAME: "Living room"},
+    )
+    for entry in (first, second):
+        entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert await hass.config_entries.async_unload(first.entry_id)
+    await hass.async_block_till_done()
+
+    assert first.state is ConfigEntryState.NOT_LOADED
+    assert second.state is ConfigEntryState.LOADED
+    assert hass.states.get("fan.living_room_fan").state != "unavailable"
+
+
+async def test_yaml_config_is_rejected(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The integration is UI only.
+
+    A leftover YAML block is reported to the user and ignored -- it must not
+    quietly create a config entry.
+    """
+    from homeassistant.setup import async_setup_component
+
+    assert await async_setup_component(
+        hass, DOMAIN, {DOMAIN: {"devices": [{"ip_address": TEST_HOST}]}}
+    )
+    await hass.async_block_till_done()
+
+    assert "does not support YAML setup" in caplog.text
+    assert hass.config_entries.async_entries(DOMAIN) == []

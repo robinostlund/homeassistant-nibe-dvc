@@ -1,0 +1,79 @@
+name: Validate PR
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - "custom_components/ecovent/**"
+      - "tests/**"
+      - "requirements-test.txt"
+      - "hacs.json"
+      - "pytest.ini"
+      - ".github/workflows/validate-pr.yml"
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+
+# Cancel in-progress runs for the same PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1 — Test suite
+  #
+  # pytest-homeassistant-custom-component pulls in a real Home Assistant, so the
+  # integration is exercised inside HA rather than against stubs. The tests that
+  # need real hardware skip themselves unless ECOVENT_TEST_HOST is set.
+  # ---------------------------------------------------------------------------
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # Home Assistant 2026.8 requires Python 3.14.2 or newer.
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install test dependencies
+        run: pip install -r requirements-test.txt
+
+      - name: Show Home Assistant version under test
+        run: python -c "from homeassistant.const import __version__ as v; print('HA', v)"
+
+      - name: Run tests
+        run: pytest -v --tb=short --timeout=60
+
+  # ---------------------------------------------------------------------------
+  # Job 2 — HACS validation (manifest, structure, file conventions)
+  # ---------------------------------------------------------------------------
+  hacs:
+    name: HACS validation
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hacs/action@main
+        with:
+          category: integration
+          # brands check only applies to repos in the HACS default store
+          ignore: brands
+
+  # ---------------------------------------------------------------------------
+  # Job 3 — hassfest (Home Assistant's own manifest/strings validation)
+  # ---------------------------------------------------------------------------
+  hassfest:
+    name: Hassfest validation
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: home-assistant/actions/hassfest@master

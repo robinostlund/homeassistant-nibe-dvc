@@ -1,0 +1,15 @@
+{
+  "entity": {
+    "binary_sensor": {
+      "boost_mode": {
+        "default": "mdi:fan-plus",
+        "state": {
+          "off": "mdi:fan-off"
+        }
+      },
+      "filter": {
+        "default": "mdi:air-filter"
+      }
+    }
+  }
+}
