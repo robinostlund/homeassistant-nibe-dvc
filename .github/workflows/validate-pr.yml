@@ -4,7 +4,7 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
-      - "custom_components/ecovent/**"
+      - "custom_components/nibe_dvc/**"
       - "tests/**"
       - "requirements-test.txt"
       - "hacs.json"
@@ -25,7 +25,7 @@ jobs:
   #
   # pytest-homeassistant-custom-component pulls in a real Home Assistant, so the
   # integration is exercised inside HA rather than against stubs. The tests that
-  # need real hardware skip themselves unless ECOVENT_TEST_HOST is set.
+  # need real hardware skip themselves unless NIBE_DVC_TEST_HOST is set.
   # ---------------------------------------------------------------------------
   tests:
     name: Tests

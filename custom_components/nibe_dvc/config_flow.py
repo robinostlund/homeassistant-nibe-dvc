@@ -1,4 +1,4 @@
-"""Config flow for the EcoVent integration."""
+"""Config flow for the NIBE DVC integration."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
 from homeassistant.helpers import config_validation as cv
 
-from .api import DEFAULT_PORT, EcoventError, EcoventFan
+from .api import DEFAULT_PORT, NibeDvcError, NibeDvcFan
 from .const import DEFAULT_NAME, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -33,12 +33,12 @@ RECONFIGURE_DATA_SCHEMA = vol.Schema(
 
 
 async def _async_try_connect(host: str, port: int) -> None:
-    """Raise EcoventError if the fan does not answer."""
-    await EcoventFan(host, port).async_update()
+    """Raise NibeDvcError if the fan does not answer."""
+    await NibeDvcFan(host, port).async_update()
 
 
-class EcoventConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for EcoVent."""
+class NibeDvcConfigFlow(ConfigFlow, domain=DOMAIN):
+    """Handle a config flow for NIBE DVC."""
 
     VERSION = 1
 
@@ -52,7 +52,7 @@ class EcoventConfigFlow(ConfigFlow, domain=DOMAIN):
             self._async_abort_entries_match({CONF_HOST: user_input[CONF_HOST]})
             try:
                 await _async_try_connect(user_input[CONF_HOST], user_input[CONF_PORT])
-            except EcoventError as err:
+            except NibeDvcError as err:
                 _LOGGER.debug("Cannot connect to %s: %s", user_input[CONF_HOST], err)
                 errors["base"] = "cannot_connect"
             else:
@@ -87,7 +87,7 @@ class EcoventConfigFlow(ConfigFlow, domain=DOMAIN):
                     await _async_try_connect(
                         user_input[CONF_HOST], user_input[CONF_PORT]
                     )
-                except EcoventError as err:
+                except NibeDvcError as err:
                     _LOGGER.debug(
                         "Cannot connect to %s: %s", user_input[CONF_HOST], err
                     )

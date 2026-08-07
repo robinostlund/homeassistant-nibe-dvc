@@ -2,7 +2,7 @@
   "config": {
     "step": {
       "user": {
-        "title": "Add EcoVent fan",
+        "title": "Add NIBE DVC fan",
         "description": "Enter the address of your ventilation unit. It must be reachable on your local network.",
         "data": {
           "host": "Host",
@@ -16,7 +16,7 @@
         }
       },
       "reconfigure": {
-        "title": "Reconfigure EcoVent fan",
+        "title": "Reconfigure NIBE DVC fan",
         "description": "Update the address of your ventilation unit, for example after it received a new IP address.",
         "data": {
           "host": "Host",
@@ -39,7 +39,7 @@
   },
   "entity": {
     "fan": {
-      "ecovent": {
+      "nibe_dvc": {
         "state_attributes": {
           "preset_mode": {
             "state": {

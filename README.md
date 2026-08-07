@@ -1,6 +1,6 @@
-# EcoVent Home Assistant Integration
+# NIBE DVC Home Assistant Integration
 
-[![HACS Custom](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/robinostlund/home_assistant_ecovent)
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/robinostlund/homeassistant-nibe-dvc)
 
 Home Assistant integration for Vents / Blauberg / Flexit / NIBE single-room heat
 recovery ventilation units with Wi-Fi.
@@ -11,17 +11,22 @@ no external Python dependencies.
 Requires Home Assistant **2026.8.0** or newer. Supports the **v1 protocol** only
 (UDP port 4000).
 
+> **Upgrading from the `ecovent` version?** The integration domain changed from
+> `ecovent` to `nibe_dvc`, so this is a clean break: remove the old integration
+> and delete `custom_components/ecovent` before installing this one, then add it
+> again from the UI. Entity history under the old ids is not carried over.
+
 ## Installation
 
-**HACS** — add `robinostlund/home_assistant_ecovent` as a custom repository with
+**HACS** — add `robinostlund/homeassistant-nibe-dvc` as a custom repository with
 category "Integration", install, restart.
 
-**Manual** — copy `custom_components/ecovent` into your `custom_components`
+**Manual** — copy `custom_components/nibe_dvc` into your `custom_components`
 folder and restart.
 
 ## Configuration
 
-**Settings → Devices & services → Add integration → EcoVent**
+**Settings → Devices & services → Add integration → NIBE DVC**
 
 Enter the unit's IP address; the default port is `4000`. Add the integration
 once per unit — multiple fans are supported, each as its own device.
@@ -104,7 +109,7 @@ Identical units from Blauberg and Flexit use the same protocol and should work:
 ```yaml
 logger:
   logs:
-    custom_components.ecovent: debug
+    custom_components.nibe_dvc: debug
 ```
 
 Download **diagnostics** from the device page for every raw parameter the unit
@@ -115,7 +120,7 @@ reports, including ones no entity exposes yet.
 ```bash
 pip install -r requirements-test.txt
 pytest                                    # hardware tests skip themselves
-ECOVENT_TEST_HOST=192.0.2.50 pytest       # include them
+NIBE_DVC_TEST_HOST=192.0.2.50 pytest       # include them
 ```
 
 The UDP protocol, including parts undocumented elsewhere, is written up in

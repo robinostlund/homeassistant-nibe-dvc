@@ -1,4 +1,4 @@
-"""Tests for EcoVent setup and unload."""
+"""Tests for NIBE DVC setup and unload."""
 
 from __future__ import annotations
 
@@ -12,8 +12,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.ecovent.api import EcoventTimeoutError
-from custom_components.ecovent.const import DOMAIN
+from custom_components.nibe_dvc.api import NibeDvcTimeoutError
+from custom_components.nibe_dvc.const import DOMAIN
 
 from .conftest import TEST_HOST, TEST_NAME
 
@@ -28,7 +28,7 @@ async def test_setup_retries_when_unreachable(
     hass: HomeAssistant, config_entry, mock_fan: AsyncMock
 ) -> None:
     """An unreachable fan puts the entry into retry, not a hard failure."""
-    mock_fan.async_update.side_effect = EcoventTimeoutError("no response")
+    mock_fan.async_update.side_effect = NibeDvcTimeoutError("no response")
     config_entry.add_to_hass(hass)
 
     assert not await hass.config_entries.async_setup(config_entry.entry_id)
@@ -124,7 +124,7 @@ async def test_diagnostics_never_leak_wifi_password(
     The unit serves its password in plaintext to anyone on the network, so the
     integration must not be the thing that copies it into a bug report.
     """
-    from custom_components.ecovent.diagnostics import (
+    from custom_components.nibe_dvc.diagnostics import (
         async_get_config_entry_diagnostics,
     )
 

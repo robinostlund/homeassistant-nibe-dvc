@@ -1,4 +1,4 @@
-"""Tests for the EcoVent UDP protocol client."""
+"""Tests for the NIBE DVC UDP protocol client."""
 
 from __future__ import annotations
 
@@ -6,9 +6,9 @@ import asyncio
 
 import pytest
 
-from custom_components.ecovent.api import (
-    EcoventNetwork,
-    EcoventProtocolError,
+from custom_components.nibe_dvc.api import (
+    NibeDvcNetwork,
+    NibeDvcProtocolError,
     parse_network_response,
     parse_response,
 )
@@ -57,13 +57,13 @@ def test_parse_truncated_payload() -> None:
 @pytest.mark.parametrize("data", [b"", b"mast", b"master"])
 def test_parse_rejects_short_frames(data: bytes) -> None:
     """Frames with no body are rejected."""
-    with pytest.raises(EcoventProtocolError):
+    with pytest.raises(NibeDvcProtocolError):
         parse_response(data)
 
 
 def test_parse_rejects_undecodable_frame() -> None:
     """A frame whose first parameter is unknown yields nothing and raises."""
-    with pytest.raises(EcoventProtocolError):
+    with pytest.raises(NibeDvcProtocolError):
         parse_response(b"master" + bytes([0xFE, 0x00]))
 
 
@@ -101,7 +101,7 @@ async def test_corrupt_frame_is_retried(monkeypatch: pytest.MonkeyPatch) -> None
     Parsing used to happen outside the retry loop, so one corrupted packet
     aborted the whole update even though a resend would have succeeded.
     """
-    from custom_components.ecovent import api
+    from custom_components.nibe_dvc import api
 
     good = bytes.fromhex("6d61737465720301040105ff0600")
     replies = [b"master" + bytes([0xFE, 0x00]), good]  # first frame undecodable
@@ -123,7 +123,7 @@ async def test_corrupt_frame_is_retried(monkeypatch: pytest.MonkeyPatch) -> None
     loop = asyncio.get_running_loop()
     monkeypatch.setattr(loop, "create_datagram_endpoint", fake_endpoint)
 
-    state = await api.EcoventFan("192.0.2.5", retries=3).async_update()
+    state = await api.NibeDvcFan("192.0.2.5", retries=3).async_update()
 
     assert replies == []  # both frames consumed: it retried
     assert state.is_on is True
@@ -170,7 +170,7 @@ def test_network_frame_password_is_discarded() -> None:
 
     assert PASSWORD_IN_FRAME in NETWORK_FRAME.decode("latin1")  # it *is* on the wire
     assert PASSWORD_IN_FRAME not in repr(network)
-    assert PASSWORD_IN_FRAME not in str(vars(EcoventNetwork).get("__doc__") or "")
+    assert PASSWORD_IN_FRAME not in str(vars(NibeDvcNetwork).get("__doc__") or "")
     for value in (network.ssid, network.ip_address):
         assert value is None or PASSWORD_IN_FRAME not in value
 
@@ -178,11 +178,11 @@ def test_network_frame_password_is_discarded() -> None:
 @pytest.mark.parametrize("data", [b"", b"master"])
 def test_parse_network_rejects_short_frames(data: bytes) -> None:
     """A frame with no body is rejected rather than returning empty settings."""
-    with pytest.raises(EcoventProtocolError):
+    with pytest.raises(NibeDvcProtocolError):
         parse_network_response(data)
 
 
 def test_parse_network_rejects_undecodable_frame() -> None:
     """A frame with no recognisable network parameter raises."""
-    with pytest.raises(EcoventProtocolError):
+    with pytest.raises(NibeDvcProtocolError):
         parse_network_response(b"master" + bytes([0xFE, 0x00]))

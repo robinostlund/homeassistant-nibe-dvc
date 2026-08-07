@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-COMPONENT = Path(__file__).parent.parent / "custom_components" / "ecovent"
+COMPONENT = Path(__file__).parent.parent / "custom_components" / "nibe_dvc"
 
 
 def _load(name: str) -> dict:
@@ -46,7 +46,7 @@ def test_manifest_required_keys() -> None:
     ):
         assert key in manifest, f"manifest.json is missing {key}"
 
-    assert manifest["domain"] == "ecovent"
+    assert manifest["domain"] == "nibe_dvc"
     assert manifest["config_flow"] is True
     # The protocol client ships with the integration; no external packages.
     assert manifest["requirements"] == []
@@ -55,7 +55,7 @@ def test_manifest_required_keys() -> None:
 @pytest.mark.parametrize(
     ("platform", "key"),
     [
-        ("fan", "ecovent"),
+        ("fan", "nibe_dvc"),
         ("binary_sensor", "alarm"),
         ("binary_sensor", "boost_mode"),
         ("binary_sensor", "filter"),
@@ -85,7 +85,7 @@ def test_no_services_yaml() -> None:
 # RFC 1918 private ranges. A real LAN address committed to a public repo leaks
 # the maintainer's network layout, so tests must use the RFC 5737
 # documentation range (192.0.2.0/24) and live tests must read the host from
-# ECOVENT_TEST_HOST instead.
+# NIBE_DVC_TEST_HOST instead.
 PRIVATE_IP = re.compile(
     r"\b(?:10\.\d{1,3}|192\.168|172\.(?:1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}\b"
 )

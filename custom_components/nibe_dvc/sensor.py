@@ -1,4 +1,4 @@
-"""Sensor platform for the EcoVent integration."""
+"""Sensor platform for the NIBE DVC integration."""
 
 from __future__ import annotations
 
@@ -15,20 +15,20 @@ from homeassistant.const import PERCENTAGE, EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from . import EcoventConfigEntry
-from .api import EcoventState
-from .entity import EcoventEntity
+from . import NibeDvcConfigEntry
+from .api import NibeDvcState
+from .entity import NibeDvcEntity
 
 
 @dataclass(frozen=True, kw_only=True)
-class EcoventSensorEntityDescription(SensorEntityDescription):
-    """Describes an EcoVent sensor."""
+class NibeDvcSensorEntityDescription(SensorEntityDescription):
+    """Describes an NIBE DVC sensor."""
 
-    value_fn: Callable[[EcoventState], int | None]
+    value_fn: Callable[[NibeDvcState], int | None]
 
 
-SENSORS: tuple[EcoventSensorEntityDescription, ...] = (
-    EcoventSensorEntityDescription(
+SENSORS: tuple[NibeDvcSensorEntityDescription, ...] = (
+    NibeDvcSensorEntityDescription(
         key="humidity",
         device_class=SensorDeviceClass.HUMIDITY,
         native_unit_of_measurement=PERCENTAGE,
@@ -40,27 +40,27 @@ SENSORS: tuple[EcoventSensorEntityDescription, ...] = (
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: EcoventConfigEntry,
+    entry: NibeDvcConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up the EcoVent sensors from a config entry."""
+    """Set up the NIBE DVC sensors from a config entry."""
     coordinator = entry.runtime_data
     reported = coordinator.data.raw if coordinator.data is not None else {}
 
     # Not every unit has every sensor fitted, so only create entities for the
     # parameters this unit actually reports.
     entities: list[SensorEntity] = [
-        EcoventSensor(entry, description)
+        NibeDvcSensor(entry, description)
         for description in SENSORS
         if description.key in reported
     ]
     if coordinator.network is not None and coordinator.network.ssid:
-        entities.append(EcoventSsidSensor(entry))
+        entities.append(NibeDvcSsidSensor(entry))
 
     async_add_entities(entities)
 
 
-class EcoventSsidSensor(EcoventEntity, SensorEntity):
+class NibeDvcSsidSensor(NibeDvcEntity, SensorEntity):
     """The Wi-Fi network the unit is joined to.
 
     Read once when the entry is set up, so it follows a reload rather than the
@@ -70,7 +70,7 @@ class EcoventSsidSensor(EcoventEntity, SensorEntity):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_translation_key = "ssid"
 
-    def __init__(self, entry: EcoventConfigEntry) -> None:
+    def __init__(self, entry: NibeDvcConfigEntry) -> None:
         """Initialize the sensor."""
         super().__init__(entry.runtime_data, entry.entry_id, entry.title, "ssid")
 
@@ -81,15 +81,15 @@ class EcoventSsidSensor(EcoventEntity, SensorEntity):
         return None if network is None else network.ssid
 
 
-class EcoventSensor(EcoventEntity, SensorEntity):
+class NibeDvcSensor(NibeDvcEntity, SensorEntity):
     """A measurement reported by the ventilation unit."""
 
-    entity_description: EcoventSensorEntityDescription
+    entity_description: NibeDvcSensorEntityDescription
 
     def __init__(
         self,
-        entry: EcoventConfigEntry,
-        description: EcoventSensorEntityDescription,
+        entry: NibeDvcConfigEntry,
+        description: NibeDvcSensorEntityDescription,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(

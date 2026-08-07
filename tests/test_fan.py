@@ -1,4 +1,4 @@
-"""Tests for the EcoVent fan platform."""
+"""Tests for the NIBE DVC fan platform."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
-from custom_components.ecovent.api import EcoventTimeoutError
+from custom_components.nibe_dvc.api import NibeDvcTimeoutError
 
 from .conftest import make_state
 
@@ -261,7 +261,7 @@ async def test_becomes_unavailable_on_error(
     hass: HomeAssistant, setup_integration, mock_fan: AsyncMock
 ) -> None:
     """A failed poll marks the entity unavailable instead of serving stale data."""
-    mock_fan.async_update.side_effect = EcoventTimeoutError("no response")
+    mock_fan.async_update.side_effect = NibeDvcTimeoutError("no response")
     async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=60))
     await hass.async_block_till_done()
 
@@ -272,7 +272,7 @@ async def test_command_error_surfaces(
     hass: HomeAssistant, setup_integration, mock_fan: AsyncMock
 ) -> None:
     """A failed command raises a HomeAssistantError the user can see."""
-    mock_fan.async_set_power.side_effect = EcoventTimeoutError("no response")
+    mock_fan.async_set_power.side_effect = NibeDvcTimeoutError("no response")
 
     with pytest.raises(HomeAssistantError):
         await hass.services.async_call(

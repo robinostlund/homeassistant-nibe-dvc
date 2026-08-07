@@ -1,23 +1,23 @@
-"""Base entity shared by all EcoVent platforms."""
+"""Base entity shared by all NIBE DVC platforms."""
 
 from __future__ import annotations
 
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .api import EcoventState
+from .api import NibeDvcState
 from .const import DOMAIN, MANUFACTURER, MODEL
-from .coordinator import EcoventDataUpdateCoordinator
+from .coordinator import NibeDvcDataUpdateCoordinator
 
 
-class EcoventEntity(CoordinatorEntity[EcoventDataUpdateCoordinator]):
-    """Common device wiring and availability for every EcoVent entity."""
+class NibeDvcEntity(CoordinatorEntity[NibeDvcDataUpdateCoordinator]):
+    """Common device wiring and availability for every NIBE DVC entity."""
 
     _attr_has_entity_name = True
 
     def __init__(
         self,
-        coordinator: EcoventDataUpdateCoordinator,
+        coordinator: NibeDvcDataUpdateCoordinator,
         entry_id: str,
         device_name: str,
         key: str | None = None,
@@ -39,7 +39,7 @@ class EcoventEntity(CoordinatorEntity[EcoventDataUpdateCoordinator]):
         )
 
     @property
-    def data(self) -> EcoventState | None:
+    def data(self) -> NibeDvcState | None:
         """Return the latest state, or None if the unit never answered."""
         return self.coordinator.data
 

@@ -1,4 +1,4 @@
-"""Fixtures for the EcoVent tests."""
+"""Fixtures for the NIBE DVC tests."""
 
 from __future__ import annotations
 
@@ -9,17 +9,17 @@ from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.ecovent.api import (
-    EcoventConfig,
-    EcoventNetwork,
-    EcoventState,
+from custom_components.nibe_dvc.api import (
+    NibeDvcConfig,
+    NibeDvcNetwork,
+    NibeDvcState,
 )
-from custom_components.ecovent.const import DOMAIN
+from custom_components.nibe_dvc.const import DOMAIN
 
 # Addresses come from the RFC 5737 documentation range (192.0.2.0/24), which is
 # reserved for examples and is guaranteed never to be a real host. Never put a
 # real LAN address here -- it would publish your network layout. Tests that need
-# real hardware read ECOVENT_TEST_HOST from the environment instead; see
+# real hardware read NIBE_DVC_TEST_HOST from the environment instead; see
 # test_live_device.py.
 TEST_HOST = "192.0.2.5"
 TEST_PORT = 4000
@@ -33,8 +33,8 @@ REAL_FRAME = bytes.fromhex(
 )
 
 
-def make_state(**overrides: int | None) -> EcoventState:
-    """Build an EcoventState, defaulting to "on, low, ventilation"."""
+def make_state(**overrides: int | None) -> NibeDvcState:
+    """Build an NibeDvcState, defaulting to "on, low, ventilation"."""
     raw: dict[str, int] = {
         "state": 1,
         "speed": 1,
@@ -57,11 +57,11 @@ def make_state(**overrides: int | None) -> EcoventState:
             raw.pop(key, None)
         else:
             raw[key] = value
-    return EcoventState(raw=raw)
+    return NibeDvcState(raw=raw)
 
 
-def make_config(**overrides: int | None) -> EcoventConfig:
-    """Build an EcoventConfig matching a real unit's settings."""
+def make_config(**overrides: int | None) -> NibeDvcConfig:
+    """Build an NibeDvcConfig matching a real unit's settings."""
     raw: dict[str, int] = {
         "humidity_sensor_threshold": 75,
         "humidity_sensor": 1,
@@ -78,7 +78,7 @@ def make_config(**overrides: int | None) -> EcoventConfig:
             raw.pop(key, None)
         else:
             raw[key] = value
-    return EcoventConfig(raw=raw)
+    return NibeDvcConfig(raw=raw)
 
 
 @pytest.fixture(autouse=True)
@@ -105,13 +105,13 @@ def mock_fan():
     fan.async_set_deactivation_delay.return_value = make_config(
         deactivation_timer=1800
     )
-    fan.async_get_network.return_value = EcoventNetwork(
+    fan.async_get_network.return_value = NibeDvcNetwork(
         ssid="test-wifi", ip_address=TEST_HOST
     )
 
     with (
-        patch("custom_components.ecovent.EcoventFan", return_value=fan),
-        patch("custom_components.ecovent.config_flow.EcoventFan", return_value=fan),
+        patch("custom_components.nibe_dvc.NibeDvcFan", return_value=fan),
+        patch("custom_components.nibe_dvc.config_flow.NibeDvcFan", return_value=fan),
     ):
         yield fan
 

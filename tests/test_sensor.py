@@ -1,4 +1,4 @@
-"""Tests for the EcoVent sensor and binary sensor platforms."""
+"""Tests for the NIBE DVC sensor and binary sensor platforms."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
-from custom_components.ecovent.api import EcoventTimeoutError
+from custom_components.nibe_dvc.api import NibeDvcTimeoutError
 
 from .conftest import make_state
 
@@ -102,7 +102,7 @@ async def test_sensors_go_unavailable(
     from homeassistant.util import dt as dt_util
     from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
-    mock_fan.async_update.side_effect = EcoventTimeoutError("no response")
+    mock_fan.async_update.side_effect = NibeDvcTimeoutError("no response")
     async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=60))
     await hass.async_block_till_done()
 
@@ -129,7 +129,7 @@ async def test_ssid_sensor_skipped_when_unreadable(
 
     Reading network settings must never be able to fail the whole setup.
     """
-    mock_fan.async_get_network.side_effect = EcoventTimeoutError("no response")
+    mock_fan.async_get_network.side_effect = NibeDvcTimeoutError("no response")
     config_entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()

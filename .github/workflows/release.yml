@@ -29,14 +29,14 @@ jobs:
           VERSION="${{ steps.get_version.outputs.VERSION }}"
           VERSION="${VERSION#v}"
           jq --arg version "$VERSION" '.version = $version' \
-            custom_components/ecovent/manifest.json > manifest.tmp
-          mv manifest.tmp custom_components/ecovent/manifest.json
+            custom_components/nibe_dvc/manifest.json > manifest.tmp
+          mv manifest.tmp custom_components/nibe_dvc/manifest.json
           echo "Updated manifest.json version to $VERSION"
 
       - name: Create release zip
         run: |
-          cd custom_components/ecovent
-          zip -r ../../ecovent.zip .
+          cd custom_components/nibe_dvc
+          zip -r ../../nibe_dvc.zip .
 
       - name: Determine if prerelease
         id: prerelease
@@ -56,12 +56,12 @@ jobs:
           IS_PRERELEASE="${{ steps.prerelease.outputs.IS_PRERELEASE }}"
 
           if [ "$IS_PRERELEASE" = "true" ]; then
-            gh release create "$VERSION" ecovent.zip \
+            gh release create "$VERSION" nibe_dvc.zip \
               --title "$VERSION" \
               --generate-notes \
               --prerelease
           else
-            gh release create "$VERSION" ecovent.zip \
+            gh release create "$VERSION" nibe_dvc.zip \
               --title "$VERSION" \
               --generate-notes
           fi

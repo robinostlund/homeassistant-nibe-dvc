@@ -1,6 +1,6 @@
-# EcoVent
+# NIBE DVC
 
-Home Assistant integration for Vents / Blauberg / Flexit single-room heat
+Home Assistant integration for NIBE / Vents / Blauberg / Flexit single-room heat
 recovery ventilation units with Wi-Fi (TwinFresh Expert, Vento Expert,
 Roomie Dual).
 
@@ -11,7 +11,7 @@ Supports the **v1 protocol** only (UDP port 4000).
 
 ## Configuration
 
-**Settings → Devices & services → Add integration → EcoVent**
+**Settings → Devices & services → Add integration → NIBE DVC**
 
 Enter the IP address of your unit; the default port is `4000`. Add the
 integration once per unit — multiple fans are fully supported.

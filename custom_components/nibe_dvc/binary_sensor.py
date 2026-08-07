@@ -1,4 +1,4 @@
-"""Binary sensor platform for the EcoVent integration."""
+"""Binary sensor platform for the NIBE DVC integration."""
 
 from __future__ import annotations
 
@@ -14,56 +14,56 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from . import EcoventConfigEntry
-from .api import EcoventState
-from .entity import EcoventEntity
+from . import NibeDvcConfigEntry
+from .api import NibeDvcState
+from .entity import NibeDvcEntity
 
 
 @dataclass(frozen=True, kw_only=True)
-class EcoventBinarySensorEntityDescription(BinarySensorEntityDescription):
-    """Describes an EcoVent binary sensor."""
+class NibeDvcBinarySensorEntityDescription(BinarySensorEntityDescription):
+    """Describes an NIBE DVC binary sensor."""
 
-    value_fn: Callable[[EcoventState], bool | None]
+    value_fn: Callable[[NibeDvcState], bool | None]
     # Config key that must be enabled for this input to be wired up at all.
     requires_enabled: str | None = None
 
 
-BINARY_SENSORS: tuple[EcoventBinarySensorEntityDescription, ...] = (
-    EcoventBinarySensorEntityDescription(
+BINARY_SENSORS: tuple[NibeDvcBinarySensorEntityDescription, ...] = (
+    NibeDvcBinarySensorEntityDescription(
         key="alarm_status",
         translation_key="alarm",
         device_class=BinarySensorDeviceClass.PROBLEM,
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda state: state.alarm,
     ),
-    EcoventBinarySensorEntityDescription(
+    NibeDvcBinarySensorEntityDescription(
         key="boost_mode",
         translation_key="boost_mode",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda state: state.boost_mode,
     ),
-    EcoventBinarySensorEntityDescription(
+    NibeDvcBinarySensorEntityDescription(
         key="humidity_sensor_status",
         translation_key="humidity_trigger",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda state: state.humidity_trigger,
         requires_enabled="humidity_sensor",
     ),
-    EcoventBinarySensorEntityDescription(
+    NibeDvcBinarySensorEntityDescription(
         key="relay_sensor_status",
         translation_key="relay_trigger",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda state: state.relay_trigger,
         requires_enabled="relay_sensor",
     ),
-    EcoventBinarySensorEntityDescription(
+    NibeDvcBinarySensorEntityDescription(
         key="sensor_10v_status",
         translation_key="sensor_10v_trigger",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda state: state.sensor_10v_trigger,
         requires_enabled="sensor_10v",
     ),
-    EcoventBinarySensorEntityDescription(
+    NibeDvcBinarySensorEntityDescription(
         key="filter_eol_timer",
         translation_key="filter",
         device_class=BinarySensorDeviceClass.PROBLEM,
@@ -75,15 +75,15 @@ BINARY_SENSORS: tuple[EcoventBinarySensorEntityDescription, ...] = (
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: EcoventConfigEntry,
+    entry: NibeDvcConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up the EcoVent binary sensors from a config entry."""
+    """Set up the NIBE DVC binary sensors from a config entry."""
     coordinator = entry.runtime_data
     reported = coordinator.data.raw if coordinator.data is not None else {}
     config = coordinator.config.raw if coordinator.config is not None else {}
 
-    def wanted(description: EcoventBinarySensorEntityDescription) -> bool:
+    def wanted(description: NibeDvcBinarySensorEntityDescription) -> bool:
         if description.key not in reported:
             return False
         # An input the installer has not enabled would sit at "off" forever.
@@ -92,21 +92,21 @@ async def async_setup_entry(
         return True
 
     async_add_entities(
-        EcoventBinarySensor(entry, description)
+        NibeDvcBinarySensor(entry, description)
         for description in BINARY_SENSORS
         if wanted(description)
     )
 
 
-class EcoventBinarySensor(EcoventEntity, BinarySensorEntity):
+class NibeDvcBinarySensor(NibeDvcEntity, BinarySensorEntity):
     """A boolean status flag reported by the ventilation unit."""
 
-    entity_description: EcoventBinarySensorEntityDescription
+    entity_description: NibeDvcBinarySensorEntityDescription
 
     def __init__(
         self,
-        entry: EcoventConfigEntry,
-        description: EcoventBinarySensorEntityDescription,
+        entry: NibeDvcConfigEntry,
+        description: NibeDvcBinarySensorEntityDescription,
     ) -> None:
         """Initialize the binary sensor."""
         super().__init__(

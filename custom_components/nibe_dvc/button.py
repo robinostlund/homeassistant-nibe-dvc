@@ -1,4 +1,4 @@
-"""Button platform for the EcoVent integration."""
+"""Button platform for the NIBE DVC integration."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from . import EcoventConfigEntry
-from .entity import EcoventEntity
+from . import NibeDvcConfigEntry
+from .entity import NibeDvcEntity
 
 RESET_FILTER = ButtonEntityDescription(
     key="reset_filter",
@@ -19,24 +19,24 @@ RESET_FILTER = ButtonEntityDescription(
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: EcoventConfigEntry,
+    entry: NibeDvcConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up the EcoVent buttons from a config entry."""
+    """Set up the NIBE DVC buttons from a config entry."""
     coordinator = entry.runtime_data
     reported = coordinator.data.raw if coordinator.data is not None else {}
 
     # Only offer the reset if the unit actually tracks a filter timer.
     if "filter_eol_timer" in reported:
-        async_add_entities([EcoventResetFilterButton(entry)])
+        async_add_entities([NibeDvcResetFilterButton(entry)])
 
 
-class EcoventResetFilterButton(EcoventEntity, ButtonEntity):
+class NibeDvcResetFilterButton(NibeDvcEntity, ButtonEntity):
     """Tell the unit its filter has been replaced."""
 
     entity_description = RESET_FILTER
 
-    def __init__(self, entry: EcoventConfigEntry) -> None:
+    def __init__(self, entry: NibeDvcConfigEntry) -> None:
         """Initialize the button."""
         super().__init__(
             entry.runtime_data, entry.entry_id, entry.title, RESET_FILTER.key

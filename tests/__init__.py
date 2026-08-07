@@ -1,1 +1,1 @@
-"""Tests for the EcoVent integration."""
+"""Tests for the NIBE DVC integration."""

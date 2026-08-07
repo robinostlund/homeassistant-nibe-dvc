@@ -1,4 +1,4 @@
-"""DataUpdateCoordinator for the EcoVent integration."""
+"""DataUpdateCoordinator for the NIBE DVC integration."""
 
 from __future__ import annotations
 
@@ -12,30 +12,30 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import (
-    EcoventConfig,
-    EcoventError,
-    EcoventFan,
-    EcoventNetwork,
-    EcoventState,
+    NibeDvcConfig,
+    NibeDvcError,
+    NibeDvcFan,
+    NibeDvcNetwork,
+    NibeDvcState,
 )
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
 
 if TYPE_CHECKING:
-    from . import EcoventConfigEntry
+    from . import NibeDvcConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class EcoventDataUpdateCoordinator(DataUpdateCoordinator[EcoventState]):
+class NibeDvcDataUpdateCoordinator(DataUpdateCoordinator[NibeDvcState]):
     """Poll a single ventilation unit and fan out its state to entities."""
 
-    config_entry: EcoventConfigEntry
+    config_entry: NibeDvcConfigEntry
 
     def __init__(
         self,
         hass: HomeAssistant,
-        entry: EcoventConfigEntry,
-        fan: EcoventFan,
+        entry: NibeDvcConfigEntry,
+        fan: NibeDvcFan,
     ) -> None:
         """Initialize the coordinator."""
         super().__init__(
@@ -46,8 +46,8 @@ class EcoventDataUpdateCoordinator(DataUpdateCoordinator[EcoventState]):
             update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL),
         )
         self.fan = fan
-        self.network: EcoventNetwork | None = None
-        self.config: EcoventConfig | None = None
+        self.network: NibeDvcNetwork | None = None
+        self.config: NibeDvcConfig | None = None
 
     async def _async_setup(self) -> None:
         """Read the network settings once, before the first refresh.
@@ -58,22 +58,22 @@ class EcoventDataUpdateCoordinator(DataUpdateCoordinator[EcoventState]):
         """
         try:
             self.network = await self.fan.async_get_network()
-        except EcoventError as err:
+        except NibeDvcError as err:
             _LOGGER.debug("Could not read network settings from %s: %s", self.fan.host, err)
 
-    async def _async_update_data(self) -> EcoventState:
+    async def _async_update_data(self) -> NibeDvcState:
         """Fetch the current state and settings from the fan."""
         try:
             state = await self.fan.async_update()
             # The boost threshold and run-on delay live in the config frame,
             # not the status frame, so both are needed every poll.
             self.config = await self.fan.async_get_config()
-        except EcoventError as err:
+        except NibeDvcError as err:
             raise UpdateFailed(f"Error communicating with {self.fan.host}: {err}") from err
         return state
 
     async def async_execute_config(
-        self, action: Callable[[], Awaitable[EcoventConfig]]
+        self, action: Callable[[], Awaitable[NibeDvcConfig]]
     ) -> None:
         """Run a config write and publish the settings it returns.
 
@@ -82,14 +82,14 @@ class EcoventDataUpdateCoordinator(DataUpdateCoordinator[EcoventState]):
         """
         try:
             self.config = await action()
-        except EcoventError as err:
+        except NibeDvcError as err:
             raise HomeAssistantError(
                 f"Error communicating with {self.fan.host}: {err}"
             ) from err
         self.async_update_listeners()
 
     async def async_execute(
-        self, action: Callable[[], Awaitable[EcoventState]]
+        self, action: Callable[[], Awaitable[NibeDvcState]]
     ) -> None:
         """Run a write command and publish the state it returns.
 
@@ -99,7 +99,7 @@ class EcoventDataUpdateCoordinator(DataUpdateCoordinator[EcoventState]):
         """
         try:
             state = await action()
-        except EcoventError as err:
+        except NibeDvcError as err:
             raise HomeAssistantError(
                 f"Error communicating with {self.fan.host}: {err}"
             ) from err

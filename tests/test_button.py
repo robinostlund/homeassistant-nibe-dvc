@@ -1,4 +1,4 @@
-"""Tests for the EcoVent button platform."""
+"""Tests for the NIBE DVC button platform."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 
-from custom_components.ecovent.api import CMD_RESET_FILTER, EcoventTimeoutError
+from custom_components.nibe_dvc.api import CMD_RESET_FILTER, NibeDvcTimeoutError
 
 from .conftest import make_state
 
@@ -60,7 +60,7 @@ async def test_press_error_surfaces(
     hass: HomeAssistant, setup_integration, mock_fan: AsyncMock
 ) -> None:
     """A failed reset raises an error the user can see."""
-    mock_fan.async_reset_filter_timer.side_effect = EcoventTimeoutError("no response")
+    mock_fan.async_reset_filter_timer.side_effect = NibeDvcTimeoutError("no response")
 
     with pytest.raises(HomeAssistantError):
         await hass.services.async_call(

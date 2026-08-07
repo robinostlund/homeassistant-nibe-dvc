@@ -1,4 +1,4 @@
-"""Tests for the EcoVent number platform — the two boost settings."""
+"""Tests for the NIBE DVC number platform — the two boost settings."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 
-from custom_components.ecovent.api import EcoventTimeoutError
+from custom_components.nibe_dvc.api import NibeDvcTimeoutError
 
 from .conftest import make_config
 
@@ -77,7 +77,7 @@ async def test_write_error_surfaces(
     hass: HomeAssistant, setup_integration, mock_fan: AsyncMock
 ) -> None:
     """A failed config write raises an error the user can see."""
-    mock_fan.async_set_humidity_threshold.side_effect = EcoventTimeoutError("nope")
+    mock_fan.async_set_humidity_threshold.side_effect = NibeDvcTimeoutError("nope")
 
     with pytest.raises(HomeAssistantError):
         await hass.services.async_call(

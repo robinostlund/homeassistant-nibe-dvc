@@ -1,4 +1,4 @@
-# EcoVent v1 UDP protocol
+# NIBE DVC v1 UDP protocol
 
 Notes on the protocol spoken by Vents / Blauberg / Flexit / NIBE single-room
 ventilation units on UDP port 4000. Parts of this are not documented anywhere
@@ -116,7 +116,7 @@ which is worth recording because a heat recovery unit plausibly ought to have
 one. Two independent lines of evidence:
 
 **1. The v2 protocol documentation says this family has none.** The
-[ecovent_v2 protocol notes](https://github.com/gody01/ecovent_v2/blob/main/protocol.md)
+[nibe_dvc_v2 protocol notes](https://github.com/gody01/nibe_dvc_v2/blob/main/protocol.md)
 place temperature at parameters `0x001E`-`0x0022`, but only for the **Freshbox /
 Micra** (`0x0200`) and **Breezy / Freshpoint** (`0x1100`-`0x1800`) families —
 units that have a reheater or a room controller. The **Vento Expert / TwinFresh
@@ -216,4 +216,4 @@ sensor.
   client must therefore not assume the reply matches the request. This one is
   handled safely by accident of design: a status parse of a network frame hits
   the unknown parameter `0x23` immediately, decodes nothing, and raises
-  `EcoventProtocolError`, which the retry loop treats as a lost packet.
+  `NibeDvcProtocolError`, which the retry loop treats as a lost packet.

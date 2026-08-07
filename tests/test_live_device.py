@@ -1,8 +1,8 @@
 """End-to-end tests against real hardware.
 
-Skipped unless ECOVENT_TEST_HOST points at a reachable ventilation unit:
+Skipped unless NIBE_DVC_TEST_HOST points at a reachable ventilation unit:
 
-    ECOVENT_TEST_HOST=192.0.2.50 pytest tests/test_live_device.py
+    NIBE_DVC_TEST_HOST=192.0.2.50 pytest tests/test_live_device.py
 
 These tests are read-only -- they never change the state of the unit.
 """
@@ -18,13 +18,13 @@ from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, STATE_OFF, STAT
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.ecovent.const import DOMAIN, PRESET_MODES
+from custom_components.nibe_dvc.const import DOMAIN, PRESET_MODES
 
-LIVE_HOST = os.environ.get("ECOVENT_TEST_HOST")
-LIVE_PORT = int(os.environ.get("ECOVENT_TEST_PORT", "4000"))
+LIVE_HOST = os.environ.get("NIBE_DVC_TEST_HOST")
+LIVE_PORT = int(os.environ.get("NIBE_DVC_TEST_PORT", "4000"))
 
 pytestmark = pytest.mark.skipif(
-    not LIVE_HOST, reason="ECOVENT_TEST_HOST is not set"
+    not LIVE_HOST, reason="NIBE_DVC_TEST_HOST is not set"
 )
 
 
@@ -97,7 +97,7 @@ async def test_live_reset_filter_button_exists(
 
 async def test_live_diagnostics(hass: HomeAssistant, live_entry) -> None:
     """Diagnostics expose the raw parameters and redact the host."""
-    from custom_components.ecovent.diagnostics import (
+    from custom_components.nibe_dvc.diagnostics import (
         async_get_config_entry_diagnostics,
     )
 

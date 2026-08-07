@@ -1,16 +1,18 @@
-"""Constants for the EcoVent integration."""
+"""Constants for the NIBE DVC integration."""
 
 from __future__ import annotations
 
 from typing import Final
 
-DOMAIN: Final = "ecovent"
+DOMAIN: Final = "nibe_dvc"
 
-DEFAULT_NAME: Final = "EcoVent"
+DEFAULT_NAME: Final = "NIBE DVC"
 DEFAULT_SCAN_INTERVAL: Final = 30
 
-MANUFACTURER: Final = "Vents"
-MODEL: Final = "TwinFresh / Vento Expert"
+MANUFACTURER: Final = "NIBE"
+# The protocol reports no model, so this is the verified unit. Rebadged
+# Vents/Blauberg/Flexit units speak the same protocol and show the same.
+MODEL: Final = "DVC 10"
 
 # Speed step 1-3 as reported by the fan; step 4 means "manual".
 SPEED_RANGE: Final = (1, 3)

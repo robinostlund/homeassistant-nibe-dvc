@@ -1,4 +1,4 @@
-"""Fan platform for the EcoVent integration."""
+"""Fan platform for the NIBE DVC integration."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from homeassistant.util.percentage import (
     ranged_value_to_percentage,
 )
 
-from . import EcoventConfigEntry
+from . import NibeDvcConfigEntry
 from .api import SPEED_MANUAL
 from .const import (
     AIRFLOW_TO_PRESET_MODE,
@@ -22,25 +22,25 @@ from .const import (
     PRESET_MODES,
     SPEED_RANGE,
 )
-from .entity import EcoventEntity
+from .entity import NibeDvcEntity
 
 SPEED_COUNT = SPEED_RANGE[1] - SPEED_RANGE[0] + 1
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: EcoventConfigEntry,
+    entry: NibeDvcConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up the EcoVent fan from a config entry."""
-    async_add_entities([EcoventFanEntity(entry)])
+    """Set up the NIBE DVC fan from a config entry."""
+    async_add_entities([NibeDvcFanEntity(entry)])
 
 
-class EcoventFanEntity(EcoventEntity, FanEntity):
+class NibeDvcFanEntity(NibeDvcEntity, FanEntity):
     """Representation of a Vents/Blauberg ventilation unit."""
 
     _attr_name = None
-    _attr_translation_key = "ecovent"
+    _attr_translation_key = "nibe_dvc"
     _attr_preset_modes = PRESET_MODES
     _attr_speed_count = SPEED_COUNT
     _attr_supported_features = (
@@ -50,7 +50,7 @@ class EcoventFanEntity(EcoventEntity, FanEntity):
         | FanEntityFeature.TURN_OFF
     )
 
-    def __init__(self, entry: EcoventConfigEntry) -> None:
+    def __init__(self, entry: NibeDvcConfigEntry) -> None:
         """Initialize the fan."""
         super().__init__(entry.runtime_data, entry.entry_id, entry.title)
 

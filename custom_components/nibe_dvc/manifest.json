@@ -1,0 +1,14 @@
+{
+  "domain": "nibe_dvc",
+  "name": "NIBE DVC",
+  "codeowners": [
+    "@robinostlund"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/robinostlund/homeassistant-nibe-dvc",
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/robinostlund/homeassistant-nibe-dvc/issues",
+  "requirements": [],
+  "version": "2.0.0"
+}

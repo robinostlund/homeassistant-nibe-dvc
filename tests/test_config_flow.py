@@ -1,4 +1,4 @@
-"""Tests for the EcoVent config flow."""
+"""Tests for the NIBE DVC config flow."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 
-from custom_components.ecovent.api import EcoventTimeoutError
-from custom_components.ecovent.const import DOMAIN
+from custom_components.nibe_dvc.api import NibeDvcTimeoutError
+from custom_components.nibe_dvc.const import DOMAIN
 
 from .conftest import TEST_HOST, TEST_NAME, TEST_PORT
 
@@ -42,7 +42,7 @@ async def test_user_flow_cannot_connect(
     hass: HomeAssistant, mock_fan: AsyncMock
 ) -> None:
     """An unreachable fan shows an error and lets the user retry."""
-    mock_fan.async_update.side_effect = EcoventTimeoutError("no response")
+    mock_fan.async_update.side_effect = NibeDvcTimeoutError("no response")
 
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": SOURCE_USER}
@@ -107,7 +107,7 @@ async def test_reconfigure_cannot_connect(
 ) -> None:
     """A bad new address is rejected and the old one is kept."""
     result = await setup_integration.start_reconfigure_flow(hass)
-    mock_fan.async_update.side_effect = EcoventTimeoutError("no response")
+    mock_fan.async_update.side_effect = NibeDvcTimeoutError("no response")
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_HOST: "192.0.2.99", CONF_PORT: TEST_PORT}

@@ -130,24 +130,24 @@ _PARAMS: dict[int, tuple[int, str]] = {
 }
 
 
-class EcoventError(Exception):
+class NibeDvcError(Exception):
     """Base error for all fan communication problems."""
 
 
-class EcoventConnectionError(EcoventError):
+class NibeDvcConnectionError(NibeDvcError):
     """The fan could not be reached."""
 
 
-class EcoventTimeoutError(EcoventConnectionError):
+class NibeDvcTimeoutError(NibeDvcConnectionError):
     """The fan did not answer in time."""
 
 
-class EcoventProtocolError(EcoventError):
+class NibeDvcProtocolError(NibeDvcError):
     """The fan answered with something we cannot parse."""
 
 
 @dataclass(frozen=True, slots=True)
-class EcoventState:
+class NibeDvcState:
     """Decoded status frame.
 
     Any field may be ``None`` when the fan did not report that parameter --
@@ -236,7 +236,7 @@ class EcoventState:
 
 
 @dataclass(frozen=True, slots=True)
-class EcoventConfig:
+class NibeDvcConfig:
     """Decoded configuration frame (CMD_CONFIG).
 
     These are the settings the unit keeps but does not repeat in its status
@@ -274,17 +274,17 @@ class EcoventConfig:
         return None if value is None else bool(value)
 
 
-def parse_config_response(data: bytes) -> EcoventConfig:
+def parse_config_response(data: bytes) -> NibeDvcConfig:
     """Decode a CMD_CONFIG reply.
 
     Shares the parameter table and framing with the status frame, so the same
     walk works; only the wrapper type differs.
     """
-    return EcoventConfig(raw=parse_response(data).raw)
+    return NibeDvcConfig(raw=parse_response(data).raw)
 
 
 @dataclass(frozen=True, slots=True)
-class EcoventNetwork:
+class NibeDvcNetwork:
     """Network settings of the unit.
 
     Deliberately does **not** carry the Wi-Fi password. The unit hands it out in
@@ -296,10 +296,10 @@ class EcoventNetwork:
     ip_address: str | None
 
 
-def parse_network_response(data: bytes) -> EcoventNetwork:
+def parse_network_response(data: bytes) -> NibeDvcNetwork:
     """Decode a CMD_NETWORK reply, keeping only the SSID and IP address."""
     if len(data) <= _HEADER_LEN:
-        raise EcoventProtocolError(f"Network response too short: {data!r}")
+        raise NibeDvcProtocolError(f"Network response too short: {data!r}")
 
     body = data[_HEADER_LEN:]
     if body.endswith(REQUEST_FOOTER):
@@ -332,20 +332,20 @@ def parse_network_response(data: bytes) -> EcoventNetwork:
         index += 2 + length
 
     if ssid is None and ip_address is None:
-        raise EcoventProtocolError(f"No network settings decoded from {data!r}")
+        raise NibeDvcProtocolError(f"No network settings decoded from {data!r}")
 
-    return EcoventNetwork(ssid=ssid, ip_address=ip_address)
+    return NibeDvcNetwork(ssid=ssid, ip_address=ip_address)
 
 
-def parse_response(data: bytes) -> EcoventState:
-    """Decode a status frame into an :class:`EcoventState`.
+def parse_response(data: bytes) -> NibeDvcState:
+    """Decode a status frame into an :class:`NibeDvcState`.
 
     Unknown parameter ids abort the walk rather than raising, so firmware that
     reports extra parameters degrades to partial data instead of breaking the
     integration.
     """
     if len(data) <= _HEADER_LEN:
-        raise EcoventProtocolError(f"Response too short: {data!r}")
+        raise NibeDvcProtocolError(f"Response too short: {data!r}")
 
     if not data.startswith(RESPONSE_HEADER):
         # Not fatal -- slave units have been reported to use other headers.
@@ -376,12 +376,12 @@ def parse_response(data: bytes) -> EcoventState:
         index += 1 + length
 
     if not values:
-        raise EcoventProtocolError(f"No parameters decoded from {data!r}")
+        raise NibeDvcProtocolError(f"No parameters decoded from {data!r}")
 
-    return EcoventState(raw=values)
+    return NibeDvcState(raw=values)
 
 
-class _EcoventProtocol(asyncio.DatagramProtocol):
+class _NibeDvcProtocol(asyncio.DatagramProtocol):
     """Resolve a future with the first datagram received."""
 
     def __init__(self) -> None:
@@ -395,14 +395,14 @@ class _EcoventProtocol(asyncio.DatagramProtocol):
         # On a connected UDP socket this surfaces ICMP errors such as port
         # unreachable, which lets us fail fast instead of waiting for a timeout.
         if not self.future.done():
-            self.future.set_exception(EcoventConnectionError(str(exc)))
+            self.future.set_exception(NibeDvcConnectionError(str(exc)))
 
     def connection_lost(self, exc: Exception | None) -> None:
         if exc is not None and not self.future.done():
-            self.future.set_exception(EcoventConnectionError(str(exc)))
+            self.future.set_exception(NibeDvcConnectionError(str(exc)))
 
 
-class EcoventFan:
+class NibeDvcFan:
     """Async client for a single ventilation unit."""
 
     def __init__(
@@ -449,11 +449,11 @@ class EcoventFan:
         transport = None
         try:
             transport, _ = await loop.create_datagram_endpoint(
-                _EcoventProtocol, remote_addr=(self._host, self._port)
+                _NibeDvcProtocol, remote_addr=(self._host, self._port)
             )
             transport.sendto(packet)
         except OSError as err:
-            raise EcoventConnectionError(
+            raise NibeDvcConnectionError(
                 f"Error talking to {self._host}:{self._port}: {err}"
             ) from err
         finally:
@@ -475,7 +475,7 @@ class EcoventFan:
             transport = None
             try:
                 transport, protocol = await loop.create_datagram_endpoint(
-                    _EcoventProtocol, remote_addr=(self._host, self._port)
+                    _NibeDvcProtocol, remote_addr=(self._host, self._port)
                 )
                 transport.sendto(packet)
                 data = await asyncio.wait_for(protocol.future, self._timeout)
@@ -483,7 +483,7 @@ class EcoventFan:
                 # any other transport failure rather than aborting the poll.
                 frame = parser(data)
             except TimeoutError as err:
-                last_error = EcoventTimeoutError(
+                last_error = NibeDvcTimeoutError(
                     f"No response from {self._host}:{self._port}"
                 )
                 last_error.__cause__ = err
@@ -495,7 +495,7 @@ class EcoventFan:
                 )
             # TimeoutError subclasses OSError, so it must be caught first.
             except OSError as err:
-                last_error = EcoventConnectionError(
+                last_error = NibeDvcConnectionError(
                     f"Error talking to {self._host}:{self._port}: {err}"
                 )
                 last_error.__cause__ = err
@@ -506,7 +506,7 @@ class EcoventFan:
                     self._retries,
                     err,
                 )
-            except (EcoventConnectionError, EcoventProtocolError) as err:
+            except (NibeDvcConnectionError, NibeDvcProtocolError) as err:
                 last_error = err
                 _LOGGER.debug(
                     "Error talking to %s (attempt %d/%d): %s",
@@ -521,32 +521,32 @@ class EcoventFan:
                 if transport is not None:
                     transport.close()
 
-        raise last_error or EcoventConnectionError(
+        raise last_error or NibeDvcConnectionError(
             f"Could not reach {self._host}:{self._port}"
         )
 
-    async def async_update(self) -> EcoventState:
+    async def async_update(self) -> NibeDvcState:
         """Poll the current status."""
         return await self._exchange(CMD_STATUS, 0x00)
 
-    async def async_set_speed(self, speed: int) -> EcoventState:
+    async def async_set_speed(self, speed: int) -> NibeDvcState:
         """Set the speed step (1-3)."""
         if not SPEED_LOW <= speed <= SPEED_HIGH:
             raise ValueError(f"Speed must be {SPEED_LOW}-{SPEED_HIGH}, got {speed}")
         return await self._exchange(CMD_SPEED, speed)
 
 
-    async def async_set_airflow(self, airflow: int) -> EcoventState:
+    async def async_set_airflow(self, airflow: int) -> NibeDvcState:
         """Set the airflow direction (0-2)."""
         if not AIRFLOW_VENTILATION <= airflow <= AIRFLOW_AIR_SUPPLY:
             raise ValueError(f"Airflow must be 0-2, got {airflow}")
         return await self._exchange(CMD_AIRFLOW, airflow)
 
-    async def async_get_config(self) -> EcoventConfig:
+    async def async_get_config(self) -> NibeDvcConfig:
         """Read the settings that do not appear in the status frame."""
         return await self._exchange(CMD_CONFIG, 0x00, parse_config_response)
 
-    async def async_set_humidity_threshold(self, percent: int) -> EcoventConfig:
+    async def async_set_humidity_threshold(self, percent: int) -> NibeDvcConfig:
         """Set the %RH at which the unit boosts, and return the new config."""
         if not MIN_HUMIDITY_THRESHOLD <= percent <= MAX_HUMIDITY_THRESHOLD:
             raise ValueError(
@@ -561,7 +561,7 @@ class EcoventFan:
                 CMD_CONFIG, 0x00, parse_config_response
             )
 
-    async def async_set_deactivation_delay(self, seconds: int) -> EcoventConfig:
+    async def async_set_deactivation_delay(self, seconds: int) -> NibeDvcConfig:
         """Set how long boost runs on after the trigger clears.
 
         The value is a 3 byte big-endian second count -- the unit accepts
@@ -580,7 +580,7 @@ class EcoventFan:
                 CMD_CONFIG, 0x00, parse_config_response
             )
 
-    async def async_get_network(self) -> EcoventNetwork:
+    async def async_get_network(self) -> NibeDvcNetwork:
         """Read the unit's network settings.
 
         The reply also carries the Wi-Fi password; parse_network_response drops
@@ -588,7 +588,7 @@ class EcoventFan:
         """
         return await self._exchange(CMD_NETWORK, 0x00, parse_network_response)
 
-    async def async_reset_filter_timer(self) -> EcoventState:
+    async def async_reset_filter_timer(self) -> NibeDvcState:
         """Tell the unit its filter has been replaced.
 
         Verified against real hardware: the unit answers with a status frame in
@@ -596,7 +596,7 @@ class EcoventFan:
         """
         return await self._exchange(CMD_RESET_FILTER, 0x00)
 
-    async def async_set_power(self, on: bool) -> EcoventState:
+    async def async_set_power(self, on: bool) -> NibeDvcState:
         """Turn the fan on or off.
 
         The device only exposes a *toggle*, so read the current state first and
