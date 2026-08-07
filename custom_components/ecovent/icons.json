@@ -10,6 +10,11 @@
       "filter": {
         "default": "mdi:air-filter"
       }
+    },
+    "button": {
+      "reset_filter": {
+        "default": "mdi:air-filter"
+      }
     }
   }
 }

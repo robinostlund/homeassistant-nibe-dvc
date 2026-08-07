@@ -59,6 +59,7 @@ def test_manifest_required_keys() -> None:
         ("binary_sensor", "alarm"),
         ("binary_sensor", "boost_mode"),
         ("binary_sensor", "filter"),
+        ("button", "reset_filter"),
     ],
 )
 def test_entity_translation_keys_exist(platform: str, key: str) -> None:

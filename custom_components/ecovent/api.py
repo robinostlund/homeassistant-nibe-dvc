@@ -38,13 +38,16 @@ CMD_TOGGLE_POWER = 0x03
 CMD_SPEED = 0x04
 CMD_MANUAL_SPEED = 0x05
 CMD_AIRFLOW = 0x06
+# Resets the filter replacement timer. Found by probing the undocumented gaps in
+# the parameter space against real hardware: 0x1E answers and clears the filter
+# end-of-life flag (0x12) from 1 to 0. Note it is *not* the same id as the
+# filter parameter itself -- writing to 0x12 is ignored with every value.
+CMD_RESET_FILTER = 0x1E
 
-# The command byte is the parameter id and the payload is the new value, but
-# only for the commands above -- they are not interchangeable with the response
-# parameter ids below. Verified on real hardware: 0x01/0x04/0x06 each answer
-# with a status frame, while writing to 0x12 (filter end-of-life) is ignored
-# entirely with any value. There is no v1 command to reset the filter timer;
-# the manufacturer documents a physical DIP switch on the unit instead.
+# The command byte is usually the parameter id with the payload as the new
+# value, but the two spaces are not interchangeable, and a command that acts
+# does not necessarily answer: 0x05 (manual speed) and 0x0B (humidity
+# threshold) both apply silently. Never infer "no response" as "no effect".
 
 SPEED_LOW = 1
 SPEED_MEDIUM = 2
@@ -347,6 +350,14 @@ class EcoventFan:
         if not AIRFLOW_VENTILATION <= airflow <= AIRFLOW_AIR_SUPPLY:
             raise ValueError(f"Airflow must be 0-2, got {airflow}")
         return await self._exchange(CMD_AIRFLOW, airflow)
+
+    async def async_reset_filter_timer(self) -> EcoventState:
+        """Tell the unit its filter has been replaced.
+
+        Verified against real hardware: the unit answers with a status frame in
+        which the filter end-of-life flag has gone from 1 to 0.
+        """
+        return await self._exchange(CMD_RESET_FILTER, 0x00)
 
     async def async_set_power(self, on: bool) -> EcoventState:
         """Turn the fan on or off.

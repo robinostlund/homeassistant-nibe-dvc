@@ -33,13 +33,16 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: actions/setup-python@v5
         with:
           # Home Assistant 2026.8 requires Python 3.14.2 or newer.
           python-version: "3.14"
           cache: pip
+          # Without this the cache step looks for requirements.txt /
+          # pyproject.toml and fails the job when it finds neither.
+          cache-dependency-path: requirements-test.txt
 
       - name: Install test dependencies
         run: pip install -r requirements-test.txt
@@ -59,7 +62,7 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: hacs/action@main
         with:
           category: integration
@@ -75,5 +78,5 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: home-assistant/actions/hassfest@master

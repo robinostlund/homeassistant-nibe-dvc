@@ -61,6 +61,11 @@
       "filter": {
         "name": "Filter"
       }
+    },
+    "button": {
+      "reset_filter": {
+        "name": "Reset filter timer"
+      }
     }
   }
 }

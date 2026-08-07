@@ -84,6 +84,16 @@ async def test_live_sensors(hass: HomeAssistant, live_entry) -> None:
         assert state.state in (STATE_ON, STATE_OFF)
 
 
+async def test_live_reset_filter_button_exists(
+    hass: HomeAssistant, live_entry
+) -> None:
+    """The filter reset button is offered for a unit with a filter timer.
+
+    Deliberately does not press it -- that would clear a real filter warning.
+    """
+    assert hass.states.get("button.live_fan_reset_filter_timer") is not None
+
+
 
 async def test_live_diagnostics(hass: HomeAssistant, live_entry) -> None:
     """Diagnostics expose the raw parameters and redact the host."""

@@ -14,6 +14,7 @@ from .coordinator import EcoventDataUpdateCoordinator
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
+    Platform.BUTTON,
     Platform.FAN,
     Platform.SENSOR,
 ]

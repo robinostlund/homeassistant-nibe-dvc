@@ -65,6 +65,7 @@ def mock_fan():
     fan.async_set_speed.return_value = make_state(speed=2)
     fan.async_set_airflow.return_value = make_state(airflow=1)
     fan.async_set_power.return_value = make_state()
+    fan.async_reset_filter_timer.return_value = make_state(filter_eol_timer=0)
 
     with (
         patch("custom_components.ecovent.EcoventFan", return_value=fan),

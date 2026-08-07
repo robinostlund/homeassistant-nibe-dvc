@@ -24,13 +24,13 @@ Per unit:
   (`ventilation`, `heat_recovery`, `air_supply`)
 - **Humidity** sensor
 - **Filter**, **Alarm** and **Boost mode** binary sensors (diagnostic)
+- **Reset filter timer** button (config)
 
 Entities are only created for parameters the unit actually reports.
 
-The filter timer cannot be reset over the network on v1 units — the filter
-parameter is read-only, verified against hardware. Reset the indicator on the
-unit itself (on TwinFresh Expert, flip the 8th DIP switch right then back
-left); the **Filter** sensor clears at the next poll.
+Press **Reset filter timer** after changing the filter and the **Filter** sensor
+clears immediately. The command behind it (`0x1E`) is undocumented and was found
+by probing real hardware.
 
 ## Controlling airflow
 
