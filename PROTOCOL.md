@@ -17,12 +17,14 @@ client stops there and keeps what it decoded rather than raising.
 
 ## Read commands
 
-Both ignore their value byte and answer in ~30 ms.
+All three ignore their value byte and answer in ~30 ms. A sweep of every command
+byte from `0x00` to `0x40` found these and nothing else.
 
 | Command | Returns |
 | --- | --- |
 | `0x01` | **status** — state, speed, manual speed, airflow, humidity, alarm, filter, boost |
 | `0x02` | **configuration** — humidity threshold, sensor enables, timers, 0-10 V threshold, cloud |
+| `0x24` | **network settings** — SSID, Wi-Fi password, IP. See the warning below |
 
 `0x02` is not implemented by any other client found; it was discovered while
 probing. A real config frame decodes as an exact fit:
@@ -75,6 +77,46 @@ the encoding:
 3. **The unit validates values.** `0x04 0xFF` and `0x04 0x00` are both rejected
    (speed is 1-3) while still answering with a status frame. Unrecognised
    command bytes stay silent instead.
+
+## `0x24` — network settings (security warning)
+
+> **`0x24` returns the unit's Wi-Fi password in plaintext to anyone on the
+> network.** The protocol has no authentication of any kind, so a single
+> unsolicited UDP datagram to port 4000 is enough. Nothing can be done about it
+> from the integration side, but it is worth knowing that these units should not
+> sit on a network you would not trust with the Wi-Fi credentials — a VLAN is
+> the sensible mitigation.
+>
+> **This integration does send `0x24`**, once per entry setup, to populate the
+> Wi-Fi network sensor. `parse_network_response()` reads the password field only
+> to step over it and never assigns it anywhere that outlives the parse, so it
+> reaches neither the coordinator, the entities, diagnostics nor the log. Tests
+> pin that behaviour — keep them if you touch this code.
+
+Unlike the other two frames this one is footer-terminated and uses
+length-prefixed strings:
+
+| Id | Field | Encoding |
+| --- | --- | --- |
+| `0x20` | Wi-Fi SSID | 1 byte length, then ASCII |
+| `0x21` | Wi-Fi password | 1 byte length, then ASCII |
+| `0x22` | unknown, empty on the test unit | 1 byte length, then ASCII |
+| `0x23` | device IP address | 4 raw bytes |
+
+## No temperature sensor
+
+There is **no temperature parameter in the v1 protocol**, which is worth
+recording because a heat recovery unit plausibly ought to have one.
+
+Every command byte `0x00`-`0x40` was swept while diffing the status and config
+frames after each probe. The result: three read commands (`0x01`, `0x02`,
+`0x24`), a handful of writes, and everything else silent. Both device frames
+parse to an exact byte fit with no spare room, so nothing is hiding in them.
+`0x07` — the obvious gap next to humidity at `0x08` — is silent for every value.
+
+The NIBE DVC 10 recovers heat with a ceramic regenerator and reverses the fan on
+a timer rather than modulating on measured temperature, so it likely has no
+temperature sensor to report.
 
 ## Status parameters
 

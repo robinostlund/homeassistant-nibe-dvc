@@ -11,7 +11,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import EcoventError, EcoventFan, EcoventState
+from .api import EcoventError, EcoventFan, EcoventNetwork, EcoventState
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
 
 if TYPE_CHECKING:
@@ -40,6 +40,19 @@ class EcoventDataUpdateCoordinator(DataUpdateCoordinator[EcoventState]):
             update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL),
         )
         self.fan = fan
+        self.network: EcoventNetwork | None = None
+
+    async def _async_setup(self) -> None:
+        """Read the network settings once, before the first refresh.
+
+        These effectively never change while the entry is loaded, so there is no
+        point spending a round trip on them every poll -- a reload picks up a
+        change. Failure is not fatal; the unit simply gets no Wi-Fi sensor.
+        """
+        try:
+            self.network = await self.fan.async_get_network()
+        except EcoventError as err:
+            _LOGGER.debug("Could not read network settings from %s: %s", self.fan.host, err)
 
     async def _async_update_data(self) -> EcoventState:
         """Fetch the current state from the fan."""

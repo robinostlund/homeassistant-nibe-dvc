@@ -114,3 +114,24 @@ async def test_yaml_config_is_rejected(
 
     assert "does not support YAML setup" in caplog.text
     assert hass.config_entries.async_entries(DOMAIN) == []
+
+
+async def test_diagnostics_never_leak_wifi_password(
+    hass: HomeAssistant, setup_integration
+) -> None:
+    """Diagnostics must not carry the Wi-Fi password or the host.
+
+    The unit serves its password in plaintext to anyone on the network, so the
+    integration must not be the thing that copies it into a bug report.
+    """
+    from custom_components.ecovent.diagnostics import (
+        async_get_config_entry_diagnostics,
+    )
+
+    diagnostics = await async_get_config_entry_diagnostics(hass, setup_integration)
+    dumped = str(diagnostics)
+
+    assert diagnostics["entry_data"][CONF_HOST] == "**REDACTED**"
+    assert TEST_HOST not in dumped
+    for key in ("password", "wifi_password", "0x21"):
+        assert key not in dumped.lower()

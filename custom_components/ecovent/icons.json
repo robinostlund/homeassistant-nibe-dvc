@@ -15,6 +15,11 @@
       "reset_filter": {
         "default": "mdi:air-filter"
       }
+    },
+    "sensor": {
+      "ssid": {
+        "default": "mdi:wifi"
+      }
     }
   }
 }

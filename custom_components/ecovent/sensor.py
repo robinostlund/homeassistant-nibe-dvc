@@ -11,7 +11,7 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import PERCENTAGE
+from homeassistant.const import PERCENTAGE, EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
@@ -49,11 +49,36 @@ async def async_setup_entry(
 
     # Not every unit has every sensor fitted, so only create entities for the
     # parameters this unit actually reports.
-    async_add_entities(
+    entities: list[SensorEntity] = [
         EcoventSensor(entry, description)
         for description in SENSORS
         if description.key in reported
-    )
+    ]
+    if coordinator.network is not None and coordinator.network.ssid:
+        entities.append(EcoventSsidSensor(entry))
+
+    async_add_entities(entities)
+
+
+class EcoventSsidSensor(EcoventEntity, SensorEntity):
+    """The Wi-Fi network the unit is joined to.
+
+    Read once when the entry is set up, so it follows a reload rather than the
+    polling interval -- the value does not change while the unit stays online.
+    """
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_translation_key = "ssid"
+
+    def __init__(self, entry: EcoventConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(entry.runtime_data, entry.entry_id, entry.title, "ssid")
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the SSID."""
+        network = self.coordinator.network
+        return None if network is None else network.ssid
 
 
 class EcoventSensor(EcoventEntity, SensorEntity):

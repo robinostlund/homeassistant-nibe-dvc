@@ -38,6 +38,7 @@ re-adding it, so entities and history survive.
 | Filter | `binary_sensor` | Diagnostic — on when the filter needs replacing |
 | Alarm | `binary_sensor` | Diagnostic |
 | Boost mode | `binary_sensor` | Diagnostic |
+| Wi-Fi network | `sensor` | Diagnostic — the SSID the unit is joined to |
 | Reset filter timer | `button` | Config — press after changing the filter |
 
 Entities are only created for parameters the unit actually reports.
@@ -67,6 +68,11 @@ Identical units from Blauberg and Flexit use the same protocol and should work:
 
 - [Flexit Roomie Dual](https://www.flexit.no/en/products/single_room_ventilator/single_room_ventilator_roomie_dual/single_room_ventilator_roomie_dual/)
 - [Blauberg VENTO Expert A50-1 W](https://blaubergventilatoren.de/en/product/vento-expert-a50-1-w)
+
+> **Security note:** these units serve their Wi-Fi password in plaintext over
+> unauthenticated UDP to anyone on the network. The integration reads that frame
+> for the SSID sensor but discards the password immediately, so it never appears
+> in state, diagnostics or logs. Still worth putting the unit on a VLAN.
 
 ## Troubleshooting
 

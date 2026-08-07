@@ -7,7 +7,9 @@ import asyncio
 import pytest
 
 from custom_components.ecovent.api import (
+    EcoventNetwork,
     EcoventProtocolError,
+    parse_network_response,
     parse_response,
 )
 
@@ -126,3 +128,61 @@ async def test_corrupt_frame_is_retried(monkeypatch: pytest.MonkeyPatch) -> None
     assert replies == []  # both frames consumed: it retried
     assert state.is_on is True
     assert state.speed == 1
+
+
+# A real CMD_NETWORK reply. The password bytes are present on purpose: the
+# point of these tests is that they never come back out.
+PASSWORD_IN_FRAME = "supersecr1"
+
+
+def _network_frame(ssid: str, password: str, ip: tuple[int, ...]) -> bytes:
+    """Build a CMD_NETWORK reply the way the unit does."""
+    return (
+        b"master"
+        + bytes([0x23, *ip])
+        + bytes([0x20, len(ssid)])
+        + ssid.encode()
+        + bytes([0x21, len(password)])
+        + password.encode()
+        + bytes([0x22])
+        + b"\r\n"
+    )
+
+
+NETWORK_FRAME = _network_frame("my-home-wifi", PASSWORD_IN_FRAME, (192, 0, 2, 5))
+
+
+def test_parse_network_frame() -> None:
+    """SSID and IP are decoded from the network frame."""
+    network = parse_network_response(NETWORK_FRAME)
+
+    assert network.ssid == "my-home-wifi"
+    assert network.ip_address == "192.0.2.5"
+
+
+def test_network_frame_password_is_discarded() -> None:
+    """The Wi-Fi password must never survive parsing.
+
+    The unit hands it out in plaintext to anyone on the network. Keeping it
+    would put it one bug report away from being published.
+    """
+    network = parse_network_response(NETWORK_FRAME)
+
+    assert PASSWORD_IN_FRAME in NETWORK_FRAME.decode("latin1")  # it *is* on the wire
+    assert PASSWORD_IN_FRAME not in repr(network)
+    assert PASSWORD_IN_FRAME not in str(vars(EcoventNetwork).get("__doc__") or "")
+    for value in (network.ssid, network.ip_address):
+        assert value is None or PASSWORD_IN_FRAME not in value
+
+
+@pytest.mark.parametrize("data", [b"", b"master"])
+def test_parse_network_rejects_short_frames(data: bytes) -> None:
+    """A frame with no body is rejected rather than returning empty settings."""
+    with pytest.raises(EcoventProtocolError):
+        parse_network_response(data)
+
+
+def test_parse_network_rejects_undecodable_frame() -> None:
+    """A frame with no recognisable network parameter raises."""
+    with pytest.raises(EcoventProtocolError):
+        parse_network_response(b"master" + bytes([0xFE, 0x00]))

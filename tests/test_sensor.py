@@ -108,3 +108,31 @@ async def test_sensors_go_unavailable(
 
     for entity_id in ("fan.basement_fan", HUMIDITY, ALARM, BOOST, FILTER):
         assert hass.states.get(entity_id).state == STATE_UNAVAILABLE
+
+
+SSID = "sensor.basement_fan_wi_fi_network"
+
+
+async def test_ssid_sensor(hass: HomeAssistant, setup_integration) -> None:
+    """The unit's Wi-Fi network is exposed as a diagnostic sensor."""
+    state = hass.states.get(SSID)
+
+    assert state is not None
+    assert state.state == "test-wifi"
+    assert er.async_get(hass).async_get(SSID).entity_category == "diagnostic"
+
+
+async def test_ssid_sensor_skipped_when_unreadable(
+    hass: HomeAssistant, config_entry, mock_fan: AsyncMock
+) -> None:
+    """A unit that will not report its network gets no Wi-Fi sensor.
+
+    Reading network settings must never be able to fail the whole setup.
+    """
+    mock_fan.async_get_network.side_effect = EcoventTimeoutError("no response")
+    config_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert hass.states.get(SSID) is None
+    assert hass.states.get("fan.basement_fan") is not None

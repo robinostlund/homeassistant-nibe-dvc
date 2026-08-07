@@ -9,7 +9,7 @@ from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.ecovent.api import EcoventState
+from custom_components.ecovent.api import EcoventNetwork, EcoventState
 from custom_components.ecovent.const import DOMAIN
 
 # Addresses come from the RFC 5737 documentation range (192.0.2.0/24), which is
@@ -66,6 +66,9 @@ def mock_fan():
     fan.async_set_airflow.return_value = make_state(airflow=1)
     fan.async_set_power.return_value = make_state()
     fan.async_reset_filter_timer.return_value = make_state(filter_eol_timer=0)
+    fan.async_get_network.return_value = EcoventNetwork(
+        ssid="test-wifi", ip_address=TEST_HOST
+    )
 
     with (
         patch("custom_components.ecovent.EcoventFan", return_value=fan),

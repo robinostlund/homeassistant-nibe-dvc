@@ -22,9 +22,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TypeVar
 
 _LOGGER = logging.getLogger(__name__)
+
+# Either decoded frame type the client can return.
+_FrameT = TypeVar("_FrameT")
 
 DEFAULT_PORT = 4000
 DEFAULT_TIMEOUT = 5.0
@@ -45,6 +50,16 @@ CMD_AIRFLOW = 0x06
 # end-of-life flag (0x12) from 1 to 0. Note it is *not* the same id as the
 # filter parameter itself -- writing to 0x12 is ignored with every value.
 CMD_RESET_FILTER = 0x1E
+# Reads the unit's network settings. The reply contains the Wi-Fi password in
+# plaintext -- see parse_network_response, which deliberately drops it.
+CMD_NETWORK = 0x24
+
+# Parameter ids inside the CMD_NETWORK reply. That frame is length-prefixed and
+# footer-terminated, unlike the status and config frames.
+NET_SSID = 0x20
+NET_PASSWORD = 0x21
+NET_UNKNOWN = 0x22
+NET_IP_ADDRESS = 0x23
 
 # The command byte is usually the parameter id with the payload as the new
 # value, but the two spaces are not interchangeable, and a command that acts
@@ -175,6 +190,60 @@ class EcoventState:
         return None if value is None else bool(value)
 
 
+@dataclass(frozen=True, slots=True)
+class EcoventNetwork:
+    """Network settings of the unit.
+
+    Deliberately does **not** carry the Wi-Fi password. The unit hands it out in
+    plaintext to anyone who asks, so it is discarded during parsing rather than
+    given somewhere it could reach a log, diagnostics dump or bug report.
+    """
+
+    ssid: str | None
+    ip_address: str | None
+
+
+def parse_network_response(data: bytes) -> EcoventNetwork:
+    """Decode a CMD_NETWORK reply, keeping only the SSID and IP address."""
+    if len(data) <= _HEADER_LEN:
+        raise EcoventProtocolError(f"Network response too short: {data!r}")
+
+    body = data[_HEADER_LEN:]
+    if body.endswith(REQUEST_FOOTER):
+        body = body[: -len(REQUEST_FOOTER)]
+
+    ssid: str | None = None
+    ip_address: str | None = None
+    index = 0
+    while index < len(body):
+        param = body[index]
+        if param == NET_IP_ADDRESS:
+            if index + 5 > len(body):
+                break
+            ip_address = ".".join(str(byte) for byte in body[index + 1 : index + 5])
+            index += 5
+            continue
+        if param not in (NET_SSID, NET_PASSWORD, NET_UNKNOWN):
+            _LOGGER.debug("Unknown network parameter 0x%02x", param)
+            break
+        if index + 2 > len(body):
+            break
+        length = body[index + 1]
+        payload = body[index + 2 : index + 2 + length]
+        if len(payload) < length:
+            break
+        if param == NET_SSID:
+            ssid = payload.decode("utf-8", "replace")
+        # NET_PASSWORD is read only to step over it. It is never assigned to
+        # anything that outlives this loop.
+        index += 2 + length
+
+    if ssid is None and ip_address is None:
+        raise EcoventProtocolError(f"No network settings decoded from {data!r}")
+
+    return EcoventNetwork(ssid=ssid, ip_address=ip_address)
+
+
 def parse_response(data: bytes) -> EcoventState:
     """Decode a status frame into an :class:`EcoventState`.
 
@@ -265,12 +334,22 @@ class EcoventFan:
         """Return the fan host."""
         return self._host
 
-    async def _exchange(self, command: int, value: int) -> EcoventState:
-        """Send one command and return the status frame it answers with."""
+    async def _exchange(
+        self,
+        command: int,
+        value: int,
+        parser: Callable[[bytes], _FrameT] = parse_response,  # type: ignore[assignment]
+    ) -> _FrameT:
+        """Send one command and return the frame it answers with."""
         async with self._lock:
-            return await self._exchange_locked(command, value)
+            return await self._exchange_locked(command, value, parser)
 
-    async def _exchange_locked(self, command: int, value: int) -> EcoventState:
+    async def _exchange_locked(
+        self,
+        command: int,
+        value: int,
+        parser: Callable[[bytes], _FrameT] = parse_response,  # type: ignore[assignment]
+    ) -> _FrameT:
         """Do one request/response cycle. The caller must hold the lock."""
         packet = REQUEST_HEADER + bytes([command, value]) + REQUEST_FOOTER
         loop = asyncio.get_running_loop()
@@ -286,7 +365,7 @@ class EcoventFan:
                 data = await asyncio.wait_for(protocol.future, self._timeout)
                 # Parsed inside the try so a corrupted datagram is retried like
                 # any other transport failure rather than aborting the poll.
-                state = parse_response(data)
+                frame = parser(data)
             except TimeoutError as err:
                 last_error = EcoventTimeoutError(
                     f"No response from {self._host}:{self._port}"
@@ -321,7 +400,7 @@ class EcoventFan:
                     err,
                 )
             else:
-                return state
+                return frame
             finally:
                 if transport is not None:
                     transport.close()
@@ -346,6 +425,14 @@ class EcoventFan:
         if not AIRFLOW_VENTILATION <= airflow <= AIRFLOW_AIR_SUPPLY:
             raise ValueError(f"Airflow must be 0-2, got {airflow}")
         return await self._exchange(CMD_AIRFLOW, airflow)
+
+    async def async_get_network(self) -> EcoventNetwork:
+        """Read the unit's network settings.
+
+        The reply also carries the Wi-Fi password; parse_network_response drops
+        it so it never reaches the coordinator, diagnostics or the log.
+        """
+        return await self._exchange(CMD_NETWORK, 0x00, parse_network_response)
 
     async def async_reset_filter_timer(self) -> EcoventState:
         """Tell the unit its filter has been replaced.
