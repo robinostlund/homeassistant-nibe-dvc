@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import timedelta
 from unittest.mock import AsyncMock
 
-import pytest
 from homeassistant.components.fan import (
     ATTR_PERCENTAGE,
     ATTR_PRESET_MODE,
@@ -23,16 +22,19 @@ from homeassistant.const import (
     STATE_OFF,
     STATE_ON,
     STATE_UNAVAILABLE,
+    STATE_UNKNOWN,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
+import pytest
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.nibe_dvc.api import NibeDvcTimeoutError
+from custom_components.nibe_dvc.const import DOMAIN
 
-from .conftest import make_state
+from .conftest import TEST_HOST, make_state
 
 ENTITY_ID = "fan.basement_fan"
 
@@ -255,8 +257,6 @@ async def test_set_preset_mode(
     assert hass.states.get(ENTITY_ID).attributes[ATTR_PRESET_MODE] == "heat_recovery"
 
 
-
-
 async def test_becomes_unavailable_on_error(
     hass: HomeAssistant, setup_integration, mock_fan: AsyncMock
 ) -> None:
@@ -271,13 +271,21 @@ async def test_becomes_unavailable_on_error(
 async def test_command_error_surfaces(
     hass: HomeAssistant, setup_integration, mock_fan: AsyncMock
 ) -> None:
-    """A failed command raises a HomeAssistantError the user can see."""
+    """A failed command raises a translated HomeAssistantError the user can see.
+
+    Home Assistant requires anything shown in the frontend to go through the
+    translation machinery rather than being a bare English string.
+    """
     mock_fan.async_set_power.side_effect = NibeDvcTimeoutError("no response")
 
-    with pytest.raises(HomeAssistantError):
+    with pytest.raises(HomeAssistantError) as err:
         await hass.services.async_call(
             FAN_DOMAIN, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: ENTITY_ID}, blocking=True
         )
+
+    assert err.value.translation_domain == DOMAIN
+    assert err.value.translation_key == "communication_error"
+    assert err.value.translation_placeholders["host"] == TEST_HOST
 
 
 async def test_unload(hass: HomeAssistant, setup_integration) -> None:
@@ -316,3 +324,21 @@ async def test_percentage_is_100_during_boost_run_on(
     await hass.async_block_till_done()
 
     assert hass.states.get(ENTITY_ID).attributes[ATTR_PERCENTAGE] == 100
+
+
+async def test_percentage_is_none_when_run_state_unknown(
+    hass: HomeAssistant, config_entry, mock_fan: AsyncMock
+) -> None:
+    """A unit not reporting whether it runs must not claim 0%.
+
+    0% reads as "off", which flatly contradicts the entity's own state of
+    "unknown" and would show a stopped fan in the UI on no evidence at all.
+    """
+    mock_fan.async_update.return_value = make_state(state=None)
+    config_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    state = hass.states.get(ENTITY_ID)
+    assert state.state == STATE_UNKNOWN
+    assert state.attributes[ATTR_PERCENTAGE] is None

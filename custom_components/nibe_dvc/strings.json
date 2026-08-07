@@ -89,5 +89,10 @@
         "name": "Boost run-on time"
       }
     }
+  },
+  "exceptions": {
+    "communication_error": {
+      "message": "Error communicating with {host}: {error}"
+    }
   }
 }

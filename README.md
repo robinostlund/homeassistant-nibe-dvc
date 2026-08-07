@@ -108,7 +108,9 @@ logger:
 ```
 
 Download **diagnostics** from the device page for every raw parameter the unit
-reports, including ones no entity exposes yet.
+reports, from both the status and the configuration frame, including the ones no
+entity exposes. The host address is redacted and the Wi-Fi settings are left out
+entirely, so a diagnostics dump is safe to attach to an issue.
 
 ## Development
 

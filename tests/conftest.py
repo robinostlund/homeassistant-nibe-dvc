@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, patch
 
-import pytest
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
 from homeassistant.core import HomeAssistant
+import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.nibe_dvc.api import (
+    _PARAMS,
+    REQUEST_HEADER,
+    RESPONSE_HEADER,
     NibeDvcConfig,
     NibeDvcNetwork,
     NibeDvcState,
@@ -31,6 +35,83 @@ TEST_NAME = "Basement fan"
 REAL_FRAME = bytes.fromhex(
     "6d6173746572030109000c0013000d001a00040105ff060008370e000000120114002500"
 )
+
+# A real config frame, exactly as decoded in PROTOCOL.md.
+REAL_CONFIG_FRAME = bytes.fromhex(
+    "6d61737465720b4b1501160117000f007080100038401100025819321f01"
+)
+
+
+def status_frame(**values: int) -> bytes:
+    """Build a status frame carrying the named parameters."""
+    return _frame({"state": 1, "speed": 1, **values})
+
+
+def config_frame(**values: int) -> bytes:
+    """Build a config frame carrying the named parameters."""
+    defaults = {
+        "humidity_sensor_threshold": 75,
+        "humidity_sensor": 1,
+        "relay_sensor": 1,
+        "sensor_10v": 0,
+        "deactivation_timer": 600,
+        "cloud_activation": 1,
+    }
+    return _frame({**defaults, **values})
+
+
+def _frame(values: dict[str, int]) -> bytes:
+    """Encode parameters back onto the wire the way the unit does."""
+    by_name = {name: (param, size) for param, (size, name) in _PARAMS.items()}
+    body = bytearray()
+    for name, value in values.items():
+        param, size = by_name[name]
+        body.append(param)
+        body += value.to_bytes(size, "big")
+    return RESPONSE_HEADER + bytes(body)
+
+
+class FakeUnit:
+    """A scripted ventilation unit spliced in at the datagram endpoint.
+
+    Lets the protocol client be exercised for real -- retries, the power toggle
+    read-modify-write, the silent config writes -- none of which the AsyncMock
+    in ``mock_fan`` can reach, because it replaces the client wholesale.
+
+    ``handler`` receives each request packet and returns the reply bytes, or
+    None to model a unit that stays silent (which is what the config writes do,
+    and what a dropped datagram looks like from here).
+    """
+
+    def __init__(self, monkeypatch: pytest.MonkeyPatch, handler) -> None:
+        """Patch the running loop so every endpoint reaches this fake."""
+        self.requests: list[bytes] = []
+        self.protocols: list = []
+        self._handler = handler
+        monkeypatch.setattr(
+            asyncio.get_running_loop(), "create_datagram_endpoint", self._endpoint
+        )
+
+    @property
+    def commands(self) -> list[int]:
+        """Return the command byte of every request received, in order."""
+        return [request[len(REQUEST_HEADER)] for request in self.requests]
+
+    async def _endpoint(self, factory, remote_addr=None):
+        protocol = factory()
+        self.protocols.append(protocol)
+        unit = self
+
+        class Transport:
+            def sendto(self, data: bytes) -> None:
+                unit.requests.append(data)
+                if (reply := unit._handler(data)) is not None:
+                    protocol.datagram_received(reply, remote_addr)
+
+            def close(self) -> None:
+                pass
+
+        return Transport(), protocol
 
 
 def make_state(**overrides: int | None) -> NibeDvcState:
@@ -102,9 +183,7 @@ def mock_fan():
     fan.async_set_humidity_threshold.return_value = make_config(
         humidity_sensor_threshold=60
     )
-    fan.async_set_deactivation_delay.return_value = make_config(
-        deactivation_timer=1800
-    )
+    fan.async_set_deactivation_delay.return_value = make_config(deactivation_timer=1800)
     fan.async_get_network.return_value = NibeDvcNetwork(
         ssid="test-wifi", ip_address=TEST_HOST
     )

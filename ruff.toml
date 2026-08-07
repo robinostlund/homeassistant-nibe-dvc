@@ -1,0 +1,67 @@
+# Lint configuration, kept close to what Home Assistant core enforces on its own
+# integrations so this one would pass the same review.
+
+target-version = "py314"
+line-length = 88
+
+[lint]
+select = [
+  "F",     # pyflakes
+  "E",     # pycodestyle errors
+  "W",     # pycodestyle warnings
+  "I",     # import sorting
+  "D",     # docstrings -- required of every HA module, class and function
+  "UP",    # pyupgrade
+  "B",     # bugbear
+  "SIM",   # simplify
+  "RET",   # return statements
+  "PIE",
+  "PERF",
+  "RUF",
+  "ASYNC", # blocking calls in async code
+  "LOG",   # logging misuse
+  "G",     # logging format strings
+  "C4",    # comprehensions
+  "DTZ",   # naive datetimes
+  "T20",   # stray print()
+  "N",     # naming
+]
+
+ignore = [
+  # The framework dictates these signatures: async_setup_entry(hass, ...),
+  # datagram_received(data, addr), async_turn_off(**kwargs). Arguments we do not
+  # use cannot be removed, so flagging them is pure noise.
+  "ARG001",
+  "ARG002",
+  # Deferred annotations are on everywhere, and moving imports into
+  # TYPE_CHECKING blocks fights Home Assistant's own import style.
+  "TC001",
+  "TC002",
+  "TC003",
+  # Conflicts with the formatter.
+  "D203",
+  "D213",
+  "W191",
+  "E111",
+  "E114",
+  "E117",
+]
+
+[lint.per-file-ignores]
+"tests/*" = [
+  # Tests are built out of assert.
+  "S101",
+  # Protocol frames are written one parameter per line with a comment saying
+  # what it is. Collapsing them into a flat byte list would lose exactly the
+  # thing that makes them reviewable against PROTOCOL.md.
+  "RUF005",
+]
+
+[lint.pydocstyle]
+convention = "pep257"
+
+[lint.isort]
+# Matches Home Assistant core, and keeps `DOMAIN as FAN_DOMAIN` in the same
+# import block as its neighbours instead of splitting it into its own.
+combine-as-imports = true
+force-sort-within-sections = true

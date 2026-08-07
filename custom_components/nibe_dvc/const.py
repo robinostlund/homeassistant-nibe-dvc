@@ -4,6 +4,16 @@ from __future__ import annotations
 
 from typing import Final
 
+from .api import (
+    AIRFLOW_AIR_SUPPLY,
+    AIRFLOW_HEAT_RECOVERY,
+    AIRFLOW_VENTILATION,
+    MAX_MANUAL_SPEED,
+    MIN_MANUAL_SPEED,
+    SPEED_HIGH,
+    SPEED_LOW,
+)
+
 DOMAIN: Final = "nibe_dvc"
 
 DEFAULT_NAME: Final = "NIBE DVC"
@@ -14,9 +24,11 @@ MANUFACTURER: Final = "NIBE"
 # Vents/Blauberg/Flexit units speak the same protocol and show the same.
 MODEL: Final = "DVC 10"
 
-# Speed step 1-3 as reported by the fan; step 4 means "manual".
-SPEED_RANGE: Final = (1, 3)
-MANUAL_SPEED_RANGE: Final = (22, 255)
+# Speed step 1-3 as reported by the fan; step 4 means "manual". Both ranges are
+# built from the wire values in api.py rather than restated, so the protocol
+# stays described in exactly one place.
+SPEED_RANGE: Final = (SPEED_LOW, SPEED_HIGH)
+MANUAL_SPEED_RANGE: Final = (MIN_MANUAL_SPEED, MAX_MANUAL_SPEED)
 
 PRESET_MODE_VENTILATION: Final = "ventilation"
 PRESET_MODE_HEAT_RECOVERY: Final = "heat_recovery"
@@ -24,9 +36,9 @@ PRESET_MODE_AIR_SUPPLY: Final = "air_supply"
 
 # Preset mode <-> airflow direction as sent on the wire.
 PRESET_MODE_TO_AIRFLOW: Final[dict[str, int]] = {
-    PRESET_MODE_VENTILATION: 0,
-    PRESET_MODE_HEAT_RECOVERY: 1,
-    PRESET_MODE_AIR_SUPPLY: 2,
+    PRESET_MODE_VENTILATION: AIRFLOW_VENTILATION,
+    PRESET_MODE_HEAT_RECOVERY: AIRFLOW_HEAT_RECOVERY,
+    PRESET_MODE_AIR_SUPPLY: AIRFLOW_AIR_SUPPLY,
 }
 AIRFLOW_TO_PRESET_MODE: Final[dict[int, str]] = {
     value: key for key, value in PRESET_MODE_TO_AIRFLOW.items()

@@ -157,6 +157,37 @@ byte.
 | `0x1A` | 0-10 V sensor status | 1 | |
 | `0x25` | 0-10 V current status | 1 | |
 
+## Config parameters
+
+Returned by `0x02`. They share the id space and the framing of the status
+frame, so the same walk decodes both — which is exactly why the client has to
+tell them apart by content; see the frame-type note at the end.
+
+| Id | Name | Bytes | Notes |
+| --- | --- | --- | --- |
+| `0x0B` | humidity sensor threshold | 1 | 40-80 %RH. Writable |
+| `0x0F` | night mode timer | 3 | big-endian seconds |
+| `0x10` | party mode timer | 3 | big-endian seconds |
+| `0x11` | deactivation (run-on) timer | 3 | big-endian seconds, 0-24 h. Writable |
+| `0x15` | humidity sensor enable | 1 | Writable |
+| `0x16` | relay (NO contact) enable | 1 | Writable |
+| `0x17` | 0-10 V sensor enable | 1 | |
+| `0x19` | 0-10 V threshold | 1 | |
+| `0x1F` | cloud activation | 1 | |
+
+## Parameters seen but not understood
+
+Decoded far enough to know their payload length — which is all that is needed
+to walk past them — but never observed carrying anything meaningful on the test
+unit. They are kept in the parameter table because an id with an unknown length
+stops the parse dead: without the length there is no way to find where the next
+parameter begins.
+
+| Id | Name | Bytes | Notes |
+| --- | --- | --- | --- |
+| `0x1B` | slave device search | 32 | master/slave pairing. Never non-zero on a standalone unit |
+| `0x1C` | response slave search | 4 | the reply half of the same exchange |
+
 ## Boost mode
 
 Boost is triggered by a *sensor* crossing its threshold — humidity, the relay
@@ -213,7 +244,24 @@ sensor.
   so failure is immediate rather than waiting for the timeout.
 - **The unit occasionally answers with the wrong frame type.** During sweeping, a
   `0x24` request came back with a status frame; the next read was correct. A
-  client must therefore not assume the reply matches the request. This one is
-  handled safely by accident of design: a status parse of a network frame hits
-  the unknown parameter `0x23` immediately, decodes nothing, and raises
-  `NibeDvcProtocolError`, which the retry loop treats as a lost packet.
+  client must therefore not assume the reply matches the request.
+
+  Two of the three directions are safe by accident of design. A status parse of
+  a network frame hits the unknown parameter `0x23` immediately, decodes
+  nothing, and raises `NibeDvcProtocolError`, which the retry loop treats as a
+  lost packet; a network parse of a status frame fails the same way.
+
+  **Status against config is the dangerous one**, because those two frames share
+  the parameter table — a status frame decodes as a structurally perfect config
+  frame in which every setting happens to read `None`. Nothing raises, nothing
+  retries, and since the config frame is what decides which number and trigger
+  entities exist, they would silently never be created. `parse_config_response`
+  therefore rejects any frame carrying `state` (`0x03`) or `speed` (`0x04`),
+  which no real config frame contains, and lets the retry loop ask again.
+
+- **A silent write needs its own retransmit.** `0x05`, `0x0B` and `0x11` answer
+  with nothing, so the ordinary request/response retry has no reply to fire on
+  and UDP will not notice a dropped datagram. The only way to know a write
+  landed is to read `0x02` back and compare, then resend if it did not — which
+  is what `_write_config_locked` does. A write that never takes is reported as
+  the value the unit actually holds rather than the one that was asked for.

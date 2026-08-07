@@ -59,9 +59,7 @@ async def test_alarm_reflects_device(
     assert hass.states.get(BOOST).state == STATE_ON
 
 
-async def test_unique_ids_are_distinct(
-    hass: HomeAssistant, setup_integration
-) -> None:
+async def test_unique_ids_are_distinct(hass: HomeAssistant, setup_integration) -> None:
     """Every entity of a unit gets its own unique id, all on one device."""
     registry = er.async_get(hass)
     entries = [

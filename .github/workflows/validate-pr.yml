@@ -10,6 +10,7 @@ on:
       - "hacs.json"
       - "pytest.ini"
       - ".github/workflows/validate-pr.yml"
+      - "ruff.toml"
   push:
     branches: [master, main]
   workflow_dispatch:
@@ -54,7 +55,26 @@ jobs:
         run: pytest -v --tb=short --timeout=60
 
   # ---------------------------------------------------------------------------
-  # Job 2 — HACS validation (manifest, structure, file conventions)
+  # Job 2 — Lint and formatting
+  #
+  # ruff.toml tracks what Home Assistant core enforces on its own integrations,
+  # so this catches the same things a core review would.
+  # ---------------------------------------------------------------------------
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/ruff-action@v3
+      - name: ruff check
+        run: ruff check --output-format=github .
+      - name: ruff format
+        run: ruff format --check --diff .
+
+  # ---------------------------------------------------------------------------
+  # Job 3 — HACS validation (manifest, structure, file conventions)
   # ---------------------------------------------------------------------------
   hacs:
     name: HACS validation
@@ -70,7 +90,7 @@ jobs:
           ignore: brands
 
   # ---------------------------------------------------------------------------
-  # Job 3 — hassfest (Home Assistant's own manifest/strings validation)
+  # Job 4 — hassfest (Home Assistant's own manifest/strings validation)
   # ---------------------------------------------------------------------------
   hassfest:
     name: Hassfest validation

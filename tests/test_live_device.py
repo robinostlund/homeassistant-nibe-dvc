@@ -11,21 +11,19 @@ from __future__ import annotations
 
 import os
 
-import pytest
-import pytest_socket
 from homeassistant.components.fan import ATTR_PERCENTAGE, ATTR_PRESET_MODE
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, STATE_OFF, STATE_ON
 from homeassistant.core import HomeAssistant
+import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+import pytest_socket
 
 from custom_components.nibe_dvc.const import DOMAIN, PRESET_MODES
 
 LIVE_HOST = os.environ.get("NIBE_DVC_TEST_HOST")
 LIVE_PORT = int(os.environ.get("NIBE_DVC_TEST_PORT", "4000"))
 
-pytestmark = pytest.mark.skipif(
-    not LIVE_HOST, reason="NIBE_DVC_TEST_HOST is not set"
-)
+pytestmark = pytest.mark.skipif(not LIVE_HOST, reason="NIBE_DVC_TEST_HOST is not set")
 
 
 @pytest.fixture(autouse=True)
@@ -84,15 +82,12 @@ async def test_live_sensors(hass: HomeAssistant, live_entry) -> None:
         assert state.state in (STATE_ON, STATE_OFF)
 
 
-async def test_live_reset_filter_button_exists(
-    hass: HomeAssistant, live_entry
-) -> None:
+async def test_live_reset_filter_button_exists(hass: HomeAssistant, live_entry) -> None:
     """The filter reset button is offered for a unit with a filter timer.
 
     Deliberately does not press it -- that would clear a real filter warning.
     """
     assert hass.states.get("button.live_fan_reset_filter_timer") is not None
-
 
 
 async def test_live_diagnostics(hass: HomeAssistant, live_entry) -> None:

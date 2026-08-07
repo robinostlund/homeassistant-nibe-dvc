@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock
 
-import pytest
 from homeassistant.components.button import DOMAIN as BUTTON_DOMAIN, SERVICE_PRESS
 from homeassistant.const import ATTR_ENTITY_ID, STATE_OFF, STATE_ON
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
+import pytest
 
 from custom_components.nibe_dvc.api import CMD_RESET_FILTER, NibeDvcTimeoutError
 

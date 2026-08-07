@@ -6,14 +6,23 @@ import asyncio
 
 import pytest
 
+from custom_components.nibe_dvc import api
 from custom_components.nibe_dvc.api import (
     NibeDvcNetwork,
     NibeDvcProtocolError,
+    parse_config_response,
     parse_network_response,
     parse_response,
 )
 
-from .conftest import REAL_FRAME
+from .conftest import (
+    REAL_CONFIG_FRAME,
+    REAL_FRAME,
+    TEST_HOST,
+    FakeUnit,
+    config_frame,
+    status_frame,
+)
 
 
 def test_parse_real_frame() -> None:
@@ -186,3 +195,208 @@ def test_parse_network_rejects_undecodable_frame() -> None:
     """A frame with no recognisable network parameter raises."""
     with pytest.raises(NibeDvcProtocolError):
         parse_network_response(b"master" + bytes([0xFE, 0x00]))
+
+
+def test_status_frame_is_not_accepted_as_config() -> None:
+    """A status frame must never decode as a config frame.
+
+    Both frames share the parameter table, so without a guard a stray status
+    frame -- which PROTOCOL.md records the unit really does send -- would decode
+    into a config whose every setting reads None. That is silent and permanent:
+    the number entities and the trigger binary sensors are built from the config
+    frame at setup, so they would simply never be created.
+    """
+    with pytest.raises(NibeDvcProtocolError):
+        parse_config_response(REAL_FRAME)
+
+
+def test_real_config_frame_still_parses() -> None:
+    """The guard must not reject an actual config frame."""
+    config = parse_config_response(REAL_CONFIG_FRAME)
+
+    assert config.humidity_threshold == 75
+    assert config.deactivation_delay == 600
+    assert config.humidity_sensor_enabled is True
+    assert config.sensor_10v_enabled is False
+    assert config.raw["night_mode_timer"] == 28800
+
+
+async def test_wrong_frame_type_is_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The config read survives the unit answering with the wrong frame."""
+    replies = [REAL_FRAME, REAL_CONFIG_FRAME]  # first one is a status frame
+
+    unit = FakeUnit(monkeypatch, lambda request: replies.pop(0))
+    config = await api.NibeDvcFan(TEST_HOST).async_get_config()
+
+    assert replies == []  # both consumed: it asked again
+    assert config.humidity_threshold == 75
+    assert unit.commands == [api.CMD_CONFIG, api.CMD_CONFIG]
+
+
+async def test_power_toggle_only_when_state_differs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The unit only exposes a toggle, so turning "on" while on must be a no-op."""
+    unit = FakeUnit(monkeypatch, lambda request: status_frame(state=1))
+    fan = api.NibeDvcFan(TEST_HOST)
+
+    state = await fan.async_set_power(True)
+
+    assert state.is_on is True
+    assert unit.commands == [api.CMD_STATUS]  # read only, no toggle sent
+
+
+async def test_power_toggle_sent_when_state_differs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Turning on a stopped unit sends the toggle."""
+    running = {"on": False}
+
+    def handler(request: bytes) -> bytes:
+        if request[len(api.REQUEST_HEADER)] == api.CMD_TOGGLE_POWER:
+            running["on"] = not running["on"]
+        return status_frame(state=int(running["on"]))
+
+    unit = FakeUnit(monkeypatch, handler)
+    state = await api.NibeDvcFan(TEST_HOST).async_set_power(True)
+
+    assert unit.commands == [api.CMD_STATUS, api.CMD_TOGGLE_POWER]
+    assert state.is_on is True
+
+
+async def test_config_write_is_resent_until_it_lands(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A silent config write that gets lost must be retransmitted.
+
+    The unit answers these writes with nothing at all, so the request/response
+    retry has no reply to trigger on. Without reading the value back and
+    resending, a single dropped datagram would leave the setting untouched and
+    report success.
+    """
+    stored = {"threshold": 75}
+    dropped = {"count": 0}
+
+    def handler(request: bytes) -> bytes | None:
+        command = request[len(api.REQUEST_HEADER)]
+        if command == api.CMD_HUMIDITY_THRESHOLD:
+            if dropped["count"] < 1:
+                dropped["count"] += 1  # first write never reaches the unit
+                return None
+            stored["threshold"] = request[len(api.REQUEST_HEADER) + 1]
+            return None  # applied silently, as the real unit does
+        return config_frame(humidity_sensor_threshold=stored["threshold"])
+
+    unit = FakeUnit(monkeypatch, handler)
+    config = await api.NibeDvcFan(TEST_HOST).async_set_humidity_threshold(60)
+
+    assert config.humidity_threshold == 60
+    assert unit.commands.count(api.CMD_HUMIDITY_THRESHOLD) == 2
+
+
+async def test_config_write_reports_what_the_unit_actually_holds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A write that never takes reports the real value rather than the wish."""
+    unit = FakeUnit(
+        monkeypatch,
+        lambda request: (
+            None
+            if request[len(api.REQUEST_HEADER)] == api.CMD_HUMIDITY_THRESHOLD
+            else config_frame(humidity_sensor_threshold=75)
+        ),
+    )
+
+    config = await api.NibeDvcFan(TEST_HOST, retries=2).async_set_humidity_threshold(60)
+
+    assert config.humidity_threshold == 75  # honest, not optimistic
+    assert unit.commands.count(api.CMD_HUMIDITY_THRESHOLD) == 2  # gave up after retries
+
+
+async def test_deactivation_delay_is_written_as_three_bytes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The run-on delay goes out as a big-endian 3 byte second count."""
+    unit = FakeUnit(
+        monkeypatch,
+        lambda request: (
+            None
+            if request[len(api.REQUEST_HEADER)] == api.CMD_DEACTIVATION_DELAY
+            else config_frame(deactivation_timer=900)
+        ),
+    )
+
+    await api.NibeDvcFan(TEST_HOST).async_set_deactivation_delay(900)
+
+    write = next(
+        r
+        for r in unit.requests
+        if r[len(api.REQUEST_HEADER)] == api.CMD_DEACTIVATION_DELAY
+    )
+    payload = write[len(api.REQUEST_HEADER) + 1 : -len(api.REQUEST_FOOTER)]
+    assert payload == bytes([0x00, 0x03, 0x84])  # 900 seconds
+
+
+async def test_silent_write_leaves_no_unretrieved_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An ICMP error on a fire-and-forget write must not be left dangling.
+
+    Nothing ever awaits the future behind a silent write, so an exception set on
+    it would only ever be seen by the garbage collector -- which asyncio reports
+    as "Future exception was never retrieved" at ERROR level, in the user's log,
+    for a write that was fine.
+    """
+    unit = FakeUnit(monkeypatch, lambda request: None)
+    fan = api.NibeDvcFan(TEST_HOST)
+
+    async with fan._lock:
+        await fan._send_locked(api.CMD_HUMIDITY_THRESHOLD, bytes([60]))
+
+    protocol = unit.protocols[0]
+
+    # The write is finished, so the future must already be settled rather than
+    # left pending for a late error to land on. This is the assertion that
+    # catches the bug: an abandoned pending future is exactly what lets an
+    # incoming ICMP error become an exception nobody reads.
+    assert protocol.future.done()
+    assert protocol.future.cancelled()
+
+    # A late error now finds a settled future and has nowhere to store itself.
+    protocol.error_received(OSError(61, "Connection refused"))
+    assert protocol.future.cancelled()
+
+
+@pytest.mark.parametrize("speed", [0, 4, 255])
+async def test_invalid_speed_is_rejected_before_sending(
+    monkeypatch: pytest.MonkeyPatch, speed: int
+) -> None:
+    """Out of range speeds never reach the wire."""
+    unit = FakeUnit(monkeypatch, lambda request: status_frame())
+
+    with pytest.raises(ValueError, match="Speed must be"):
+        await api.NibeDvcFan(TEST_HOST).async_set_speed(speed)
+
+    assert unit.requests == []
+
+
+@pytest.mark.parametrize(
+    ("method", "value"),
+    [
+        ("async_set_airflow", 3),
+        ("async_set_humidity_threshold", 39),
+        ("async_set_humidity_threshold", 81),
+        ("async_set_deactivation_delay", -1),
+        ("async_set_deactivation_delay", 24 * 60 * 60 + 1),
+    ],
+)
+async def test_out_of_range_writes_are_rejected(
+    monkeypatch: pytest.MonkeyPatch, method: str, value: int
+) -> None:
+    """Every setter validates against the range the protocol documents."""
+    unit = FakeUnit(monkeypatch, lambda request: status_frame())
+
+    with pytest.raises(ValueError):
+        await getattr(api.NibeDvcFan(TEST_HOST), method)(value)
+
+    assert unit.requests == []

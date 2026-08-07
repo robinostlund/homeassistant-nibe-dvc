@@ -8,8 +8,8 @@ with no matching string (the entity then falls back to its device class name).
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
+import re
 
 import pytest
 
@@ -108,3 +108,26 @@ def test_no_private_ip_addresses(path: Path) -> None:
         f"{path.relative_to(REPO)} contains private IP address(es) {found}. "
         "Use the RFC 5737 documentation range (192.0.2.x) instead."
     )
+
+
+def test_raised_translation_keys_exist() -> None:
+    """Every exception raised with a translation_key has a message for it.
+
+    A key with no entry does not fail loudly -- Home Assistant falls back to
+    showing the raw key to the user, which is how a missing translation ships
+    unnoticed.
+    """
+    strings = _load("strings.json")
+    source = "\n".join(path.read_text() for path in COMPONENT.rglob("*.py"))
+    # Only exceptions pass translation_domain; entity descriptions carry a bare
+    # translation_key and resolve against entity.<platform> instead, which
+    # test_entity_translation_keys_exist covers.
+    raised = set(
+        re.findall(r"translation_domain=DOMAIN,\s*translation_key=\"([^\"]+)\"", source)
+    )
+
+    assert raised, "expected at least one translated exception"
+    for key in raised:
+        assert key in strings.get("exceptions", {}), (
+            f"exception translation_key {key!r} has no strings.json entry"
+        )

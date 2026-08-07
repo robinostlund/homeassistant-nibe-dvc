@@ -1,8 +1,8 @@
-"""Asyncio UDP client for Vents/Blauberg TwinFresh style ventilation units.
+r"""Asyncio UDP client for Vents/Blauberg TwinFresh style ventilation units.
 
 The protocol is a very small request/response scheme over UDP port 4000:
 
-    request:  b"mobile" + <cmd> <value> + b"\\r\\n"
+    request:  b"mobile" + <cmd> <value> + b"\r\n"
     response: b"master" + <param> <payload...> <param> <payload...> ...
 
 Every command this client sends is answered with a full status frame, so a
@@ -21,9 +21,9 @@ the success path.
 from __future__ import annotations
 
 import asyncio
-import logging
 from collections.abc import Callable
 from dataclasses import dataclass
+import logging
 from typing import TypeVar
 
 _LOGGER = logging.getLogger(__name__)
@@ -274,13 +274,30 @@ class NibeDvcConfig:
         return None if value is None else bool(value)
 
 
+# Parameters that only ever appear in a *status* frame. The unit occasionally
+# answers with the wrong frame type (see PROTOCOL.md), and because both frames
+# share the parameter table below, a stray status frame would otherwise decode
+# as a perfectly valid looking config frame in which every setting reads None.
+# That is silent and permanent damage: the number entities and the three
+# trigger binary sensors are created from the config frame at setup, so they
+# would simply never appear.
+_STATUS_ONLY_PARAMS: frozenset[str] = frozenset({"state", "speed"})
+
+
 def parse_config_response(data: bytes) -> NibeDvcConfig:
     """Decode a CMD_CONFIG reply.
 
     Shares the parameter table and framing with the status frame, so the same
-    walk works; only the wrapper type differs.
+    walk works; only the wrapper type differs. A status frame arriving here is
+    rejected rather than accepted as an empty config -- the retry loop then
+    treats it like any other bad datagram and asks again.
     """
-    return NibeDvcConfig(raw=parse_response(data).raw)
+    frame = parse_response(data)
+    if _STATUS_ONLY_PARAMS & frame.raw.keys():
+        raise NibeDvcProtocolError(
+            f"Got a status frame where a config frame was expected: {data!r}"
+        )
+    return NibeDvcConfig(raw=frame.raw)
 
 
 @dataclass(frozen=True, slots=True)
@@ -401,6 +418,18 @@ class _NibeDvcProtocol(asyncio.DatagramProtocol):
         if exc is not None and not self.future.done():
             self.future.set_exception(NibeDvcConnectionError(str(exc)))
 
+    def discard(self) -> None:
+        """Abandon the future without leaving an exception nobody reads.
+
+        Fire and forget writes never await the future, so an ICMP error landing
+        on the socket would set an exception that is only ever seen by the
+        garbage collector -- which asyncio reports as "Future exception was
+        never retrieved" at ERROR level. Cancelling covers the pending case and
+        reading the exception covers the already-failed one.
+        """
+        if not self.future.cancel():
+            self.future.exception()
+
 
 class NibeDvcFan:
     """Async client for a single ventilation unit."""
@@ -437,18 +466,19 @@ class NibeDvcFan:
         async with self._lock:
             return await self._exchange_locked(command, value, parser)
 
-    async def _write_silent_locked(self, command: int, payload: bytes) -> None:
+    async def _send_locked(self, command: int, payload: bytes) -> None:
         """Send a command the unit applies without replying.
 
         Config writes such as the humidity threshold and the deactivation delay
-        take effect but send nothing back, so there is nothing to wait for and
-        nothing to retry against. The caller must re-read to confirm.
+        take effect but send nothing back, so there is nothing to wait for.
+        The caller must re-read to confirm; see _write_config_locked.
         """
         packet = REQUEST_HEADER + bytes([command]) + payload + REQUEST_FOOTER
         loop = asyncio.get_running_loop()
         transport = None
+        protocol = None
         try:
-            transport, _ = await loop.create_datagram_endpoint(
+            transport, protocol = await loop.create_datagram_endpoint(
                 _NibeDvcProtocol, remote_addr=(self._host, self._port)
             )
             transport.sendto(packet)
@@ -459,6 +489,45 @@ class NibeDvcFan:
         finally:
             if transport is not None:
                 transport.close()
+            if protocol is not None:
+                protocol.discard()
+
+    async def _write_config_locked(
+        self, command: int, payload: bytes, key: str, expected: int
+    ) -> NibeDvcConfig:
+        """Apply a silent config write and return the confirmed settings.
+
+        Because the unit answers these writes with nothing at all, the normal
+        request/response retry has no reply to trigger on -- a dropped datagram
+        would leave the setting unchanged and nobody any the wiser. So the value
+        is read back and the write resent until it lands.
+
+        If the unit does not report ``key`` in its config frame there is nothing
+        to verify against, so the first read is accepted rather than resending
+        forever. A write that never takes is not an error either: the returned
+        config is what the unit actually holds, which is the honest thing to
+        show. The caller must hold the lock.
+        """
+        config: NibeDvcConfig
+        for attempt in range(1, self._retries + 1):
+            await self._send_locked(command, payload)
+            config = await self._exchange_locked(
+                CMD_CONFIG, 0x00, parse_config_response
+            )
+            if key not in config.raw or config.raw[key] == expected:
+                return config
+            _LOGGER.debug(
+                "Config write 0x%02x to %s did not take (attempt %d/%d): "
+                "%s reads %s, wanted %d",
+                command,
+                self._host,
+                attempt,
+                self._retries,
+                key,
+                config.raw[key],
+                expected,
+            )
+        return config
 
     async def _exchange_locked(
         self,
@@ -535,7 +604,6 @@ class NibeDvcFan:
             raise ValueError(f"Speed must be {SPEED_LOW}-{SPEED_HIGH}, got {speed}")
         return await self._exchange(CMD_SPEED, speed)
 
-
     async def async_set_airflow(self, airflow: int) -> NibeDvcState:
         """Set the airflow direction (0-2)."""
         if not AIRFLOW_VENTILATION <= airflow <= AIRFLOW_AIR_SUPPLY:
@@ -554,11 +622,11 @@ class NibeDvcFan:
                 f"{MAX_HUMIDITY_THRESHOLD}, got {percent}"
             )
         async with self._lock:
-            await self._write_silent_locked(
-                CMD_HUMIDITY_THRESHOLD, bytes([percent])
-            )
-            return await self._exchange_locked(
-                CMD_CONFIG, 0x00, parse_config_response
+            return await self._write_config_locked(
+                CMD_HUMIDITY_THRESHOLD,
+                bytes([percent]),
+                "humidity_sensor_threshold",
+                percent,
             )
 
     async def async_set_deactivation_delay(self, seconds: int) -> NibeDvcConfig:
@@ -573,11 +641,11 @@ class NibeDvcFan:
                 f"{MAX_DEACTIVATION_DELAY} seconds, got {seconds}"
             )
         async with self._lock:
-            await self._write_silent_locked(
-                CMD_DEACTIVATION_DELAY, seconds.to_bytes(3, "big")
-            )
-            return await self._exchange_locked(
-                CMD_CONFIG, 0x00, parse_config_response
+            return await self._write_config_locked(
+                CMD_DEACTIVATION_DELAY,
+                seconds.to_bytes(3, "big"),
+                "deactivation_timer",
+                seconds,
             )
 
     async def async_get_network(self) -> NibeDvcNetwork:

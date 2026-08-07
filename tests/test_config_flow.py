@@ -80,8 +80,6 @@ async def test_user_flow_duplicate(
     assert result["reason"] == "already_configured"
 
 
-
-
 async def test_reconfigure(
     hass: HomeAssistant, setup_integration, mock_fan: AsyncMock
 ) -> None:

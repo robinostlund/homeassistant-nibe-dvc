@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Awaitable, Callable
 from datetime import timedelta
+import logging
 from typing import TYPE_CHECKING
 
 from homeassistant.core import HomeAssistant
@@ -59,17 +59,31 @@ class NibeDvcDataUpdateCoordinator(DataUpdateCoordinator[NibeDvcState]):
         try:
             self.network = await self.fan.async_get_network()
         except NibeDvcError as err:
-            _LOGGER.debug("Could not read network settings from %s: %s", self.fan.host, err)
+            _LOGGER.debug(
+                "Could not read network settings from %s: %s", self.fan.host, err
+            )
 
     async def _async_update_data(self) -> NibeDvcState:
         """Fetch the current state and settings from the fan."""
         try:
             state = await self.fan.async_update()
-            # The boost threshold and run-on delay live in the config frame,
-            # not the status frame, so both are needed every poll.
+        except NibeDvcError as err:
+            raise UpdateFailed(
+                f"Error communicating with {self.fan.host}: {err}"
+            ) from err
+
+        # The boost threshold and run-on delay live in the config frame, not the
+        # status frame, so it is read every poll too. It must not be fatal
+        # though: the config command is undocumented and was found by probing,
+        # so a firmware that does not implement it would otherwise take the fan
+        # and every sensor down with it. Losing it only costs the two number
+        # entities and the trigger sensors, which already handle it being None.
+        try:
             self.config = await self.fan.async_get_config()
         except NibeDvcError as err:
-            raise UpdateFailed(f"Error communicating with {self.fan.host}: {err}") from err
+            _LOGGER.debug("Could not read config frame from %s: %s", self.fan.host, err)
+            self.config = None
+
         return state
 
     async def async_execute_config(
@@ -83,9 +97,7 @@ class NibeDvcDataUpdateCoordinator(DataUpdateCoordinator[NibeDvcState]):
         try:
             self.config = await action()
         except NibeDvcError as err:
-            raise HomeAssistantError(
-                f"Error communicating with {self.fan.host}: {err}"
-            ) from err
+            raise self._command_error(err) from err
         self.async_update_listeners()
 
     async def async_execute(
@@ -100,7 +112,18 @@ class NibeDvcDataUpdateCoordinator(DataUpdateCoordinator[NibeDvcState]):
         try:
             state = await action()
         except NibeDvcError as err:
-            raise HomeAssistantError(
-                f"Error communicating with {self.fan.host}: {err}"
-            ) from err
+            raise self._command_error(err) from err
         self.async_set_updated_data(state)
+
+    def _command_error(self, err: NibeDvcError) -> HomeAssistantError:
+        """Build the error a failed command shows the user.
+
+        Raised through the translation machinery rather than as a bare string so
+        the message follows the user's language, as Home Assistant requires of
+        anything surfaced in the frontend.
+        """
+        return HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="communication_error",
+            translation_placeholders={"host": self.fan.host, "error": str(err)},
+        )

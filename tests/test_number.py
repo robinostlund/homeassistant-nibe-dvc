@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from unittest.mock import AsyncMock
 
-import pytest
 from homeassistant.components.number import (
     ATTR_VALUE,
     DOMAIN as NUMBER_DOMAIN,
     SERVICE_SET_VALUE,
 )
-from homeassistant.const import ATTR_ENTITY_ID
+from homeassistant.const import ATTR_ENTITY_ID, STATE_ON, STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
+from homeassistant.util import dt as dt_util
+import pytest
+from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.nibe_dvc.api import NibeDvcTimeoutError
 
@@ -101,3 +104,42 @@ async def test_numbers_skipped_when_not_reported(
 
     assert hass.states.get(THRESHOLD) is None
     assert hass.states.get(RUN_ON) is None
+
+
+async def test_unit_without_config_frame_still_works(
+    hass: HomeAssistant, config_entry, mock_fan: AsyncMock
+) -> None:
+    """A unit that will not answer the config command must still set up.
+
+    The config command is undocumented and was found by probing, so a firmware
+    that does not implement it is entirely plausible. It used to take the whole
+    integration down with it -- no fan, no sensors, just a permanent retry loop.
+    Losing it should cost only the settings that live in that frame.
+    """
+    mock_fan.async_get_config.side_effect = NibeDvcTimeoutError("no config frame")
+    config_entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert hass.states.get("fan.basement_fan").state == STATE_ON
+    assert hass.states.get("sensor.basement_fan_humidity").state == "55"
+    assert hass.states.get("binary_sensor.basement_fan_filter") is not None
+    # Only the config-frame entities are missing.
+    assert hass.states.get(THRESHOLD) is None
+    assert hass.states.get(RUN_ON) is None
+
+
+async def test_numbers_go_unavailable_when_config_is_lost(
+    hass: HomeAssistant, setup_integration, mock_fan: AsyncMock
+) -> None:
+    """Losing the config frame mid-run must not serve a stale setting."""
+    assert hass.states.get(THRESHOLD).state != STATE_UNAVAILABLE
+
+    mock_fan.async_get_config.side_effect = NibeDvcTimeoutError("no config frame")
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=60))
+    await hass.async_block_till_done()
+
+    assert hass.states.get(THRESHOLD).state == STATE_UNAVAILABLE
+    # The fan keeps working -- the status frame is still arriving.
+    assert hass.states.get("fan.basement_fan").state == STATE_ON

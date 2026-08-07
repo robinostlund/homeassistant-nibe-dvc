@@ -70,6 +70,10 @@ class NibeDvcFanEntity(NibeDvcEntity, FanEntity):
         """
         if (data := self.data) is None:
             return None
+        if data.is_on is None:
+            # The unit did not report whether it is running, so claiming 0%
+            # would contradict the entity's own "unknown" state.
+            return None
         if not data.is_on:
             return 0
         if data.boost_mode:
