@@ -5,9 +5,11 @@ The protocol is a very small request/response scheme over UDP port 4000:
     request:  b"mobile" + <cmd> <value> + b"\\r\\n"
     response: b"master" + <param> <payload...> <param> <payload...> ...
 
-Every command -- including the write commands -- is answered with a full
-status frame, so a single round trip both applies the change and returns the
-resulting device state.
+Every command this client sends is answered with a full status frame, so a
+single round trip both applies the change and returns the resulting device
+state. That is not true of the protocol as a whole -- some write commands act
+without replying (see the note on CMD_MANUAL_SPEED below) -- but it holds for
+the commands used here.
 
 This replaces the ``pyEcovent`` package, which performed blocking socket I/O
 with a 15 second timeout -- unusable from the Home Assistant event loop, where
@@ -54,12 +56,15 @@ SPEED_MEDIUM = 2
 SPEED_HIGH = 3
 SPEED_MANUAL = 4
 
-MIN_MANUAL_SPEED = 22
-MAX_MANUAL_SPEED = 255
-
 AIRFLOW_VENTILATION = 0
 AIRFLOW_HEAT_RECOVERY = 1
 AIRFLOW_AIR_SUPPLY = 2
+
+# Manual speed is a raw duty value written with CMD_MANUAL_SPEED. No entity
+# drives it yet -- these are kept as the protocol reference for a future number
+# entity, since the range is not derivable from anything else.
+MIN_MANUAL_SPEED = 22
+MAX_MANUAL_SPEED = 255
 
 # Wire parameter id -> (payload length in bytes, name).
 # The payload length is what lets us walk the frame, so an unknown id means we
@@ -202,8 +207,9 @@ def parse_response(data: bytes) -> EcoventState:
         if len(payload) < length:
             _LOGGER.debug("Truncated payload for parameter %s in %r", name, body)
             break
-        # Every parameter we act on is single byte; multi byte ones are timers
-        # that we only keep for diagnostics.
+        # Every parameter we act on is single byte. The 3 byte ones are timers
+        # encoded as big-endian seconds -- a real unit reported 28800, 14400 and
+        # 600, i.e. exactly 8h, 4h and 10min. They are kept for diagnostics.
         values[name] = payload[0] if length == 1 else int.from_bytes(payload, "big")
         index += 1 + length
 
@@ -259,11 +265,6 @@ class EcoventFan:
         """Return the fan host."""
         return self._host
 
-    @property
-    def port(self) -> int:
-        """Return the fan port."""
-        return self._port
-
     async def _exchange(self, command: int, value: int) -> EcoventState:
         """Send one command and return the status frame it answers with."""
         async with self._lock:
@@ -283,6 +284,9 @@ class EcoventFan:
                 )
                 transport.sendto(packet)
                 data = await asyncio.wait_for(protocol.future, self._timeout)
+                # Parsed inside the try so a corrupted datagram is retried like
+                # any other transport failure rather than aborting the poll.
+                state = parse_response(data)
             except TimeoutError as err:
                 last_error = EcoventTimeoutError(
                     f"No response from {self._host}:{self._port}"
@@ -307,17 +311,17 @@ class EcoventFan:
                     self._retries,
                     err,
                 )
-            except EcoventConnectionError as err:
+            except (EcoventConnectionError, EcoventProtocolError) as err:
                 last_error = err
                 _LOGGER.debug(
-                    "Connection error talking to %s (attempt %d/%d): %s",
+                    "Error talking to %s (attempt %d/%d): %s",
                     self._host,
                     attempt,
                     self._retries,
                     err,
                 )
             else:
-                return parse_response(data)
+                return state
             finally:
                 if transport is not None:
                     transport.close()
@@ -336,14 +340,6 @@ class EcoventFan:
             raise ValueError(f"Speed must be {SPEED_LOW}-{SPEED_HIGH}, got {speed}")
         return await self._exchange(CMD_SPEED, speed)
 
-    async def async_set_manual_speed(self, speed: int) -> EcoventState:
-        """Set the manual speed (22-255)."""
-        if not MIN_MANUAL_SPEED <= speed <= MAX_MANUAL_SPEED:
-            raise ValueError(
-                f"Manual speed must be {MIN_MANUAL_SPEED}-{MAX_MANUAL_SPEED}, "
-                f"got {speed}"
-            )
-        return await self._exchange(CMD_MANUAL_SPEED, speed)
 
     async def async_set_airflow(self, airflow: int) -> EcoventState:
         """Set the airflow direction (0-2)."""

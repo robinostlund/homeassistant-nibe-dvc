@@ -8,8 +8,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
-from .api import EcoventFan
-from .const import DEFAULT_PORT, DOMAIN
+from .api import DEFAULT_PORT, EcoventFan
+from .const import DOMAIN
 from .coordinator import EcoventDataUpdateCoordinator
 
 PLATFORMS: list[Platform] = [

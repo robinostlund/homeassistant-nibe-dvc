@@ -7,7 +7,6 @@ from typing import Final
 DOMAIN: Final = "ecovent"
 
 DEFAULT_NAME: Final = "EcoVent"
-DEFAULT_PORT: Final = 4000
 DEFAULT_SCAN_INTERVAL: Final = 30
 
 MANUFACTURER: Final = "Vents"

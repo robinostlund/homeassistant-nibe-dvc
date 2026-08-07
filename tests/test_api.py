@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from custom_components.ecovent.api import (
@@ -71,3 +73,56 @@ def test_state_missing_values_are_none() -> None:
     assert state.is_on is None
     assert state.airflow is None
     assert state.humidity is None
+
+
+def test_timers_decode_as_big_endian_seconds() -> None:
+    """The 3-byte timer parameters are seconds, not packed h/m/s.
+
+    A real unit reported values that land on exact durations, which is what
+    confirms the encoding.
+    """
+    frame = b"master" + bytes(
+        [0x0F, 0x00, 0x70, 0x80]  # night mode timer
+        + [0x10, 0x00, 0x38, 0x40]  # party mode timer
+        + [0x11, 0x00, 0x02, 0x58]  # deactivation timer
+    )
+    raw = parse_response(frame).raw
+
+    assert raw["night_mode_timer"] == 28800  # 8 h
+    assert raw["party_mode_timer"] == 14400  # 4 h
+    assert raw["deactivation_timer"] == 600  # 10 min
+
+
+async def test_corrupt_frame_is_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A single unparseable datagram is retried rather than failing the poll.
+
+    Parsing used to happen outside the retry loop, so one corrupted packet
+    aborted the whole update even though a resend would have succeeded.
+    """
+    from custom_components.ecovent import api
+
+    good = bytes.fromhex("6d61737465720301040105ff0600")
+    replies = [b"master" + bytes([0xFE, 0x00]), good]  # first frame undecodable
+
+    class FakeTransport:
+        def sendto(self, data: bytes) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+    async def fake_endpoint(factory, remote_addr=None):
+        protocol = factory()
+        protocol.future.set_result(replies.pop(0))
+        return FakeTransport(), protocol
+
+    # Patch only this one method on the real loop; the protocol object still
+    # needs the loop itself to create its future.
+    loop = asyncio.get_running_loop()
+    monkeypatch.setattr(loop, "create_datagram_endpoint", fake_endpoint)
+
+    state = await api.EcoventFan("192.0.2.5", retries=3).async_update()
+
+    assert replies == []  # both frames consumed: it retried
+    assert state.is_on is True
+    assert state.speed == 1

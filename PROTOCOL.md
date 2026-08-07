@@ -39,6 +39,16 @@ probing. A real config frame decodes as an exact fit:
 1f 01            cloud_activation          = 1
 ```
 
+**Three byte values are big-endian seconds**, not packed hours/minutes/seconds.
+The frame above decodes to exactly 8 h, 4 h and 10 min, which is what confirms
+the encoding:
+
+| Parameter | Bytes | Seconds | |
+| --- | --- | --- | --- |
+| night_mode_timer | `00 70 80` | 28800 | 8 h |
+| party_mode_timer | `00 38 40` | 14400 | 4 h |
+| deactivation_timer | `00 02 58` | 600 | 10 min |
+
 ## Write commands
 
 | Command | Effect | Answers? |
@@ -103,9 +113,10 @@ Two open questions:
   configured step, so a client that derives a percentage from `speed` will
   under-report actual airflow during boost.
 - **`boost` takes at least three values (0, 1, 2).** `2` appears to be a
-  post-boost run-on or lockout; it persisted for 90 s and was cleared by a power
-  cycle. It may clear on its own, plausibly on the `deactivation_timer`. The
-  integration currently treats the value as a boolean, which may misreport `2`.
+  post-boost run-on or lockout. It persisted for 90 s and was then cleared by a
+  power cycle — but the `deactivation_timer` reads **600 s (10 min)**, so it very
+  likely would have cleared on its own had the observation run longer. The
+  integration treats the value as a boolean, so `2` currently reports as "on".
 
 ## Behaviour notes
 

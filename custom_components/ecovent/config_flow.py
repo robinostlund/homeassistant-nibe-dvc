@@ -11,8 +11,8 @@ from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
 from homeassistant.helpers import config_validation as cv
 
-from .api import EcoventError, EcoventFan
-from .const import DEFAULT_NAME, DEFAULT_PORT, DOMAIN
+from .api import DEFAULT_PORT, EcoventError, EcoventFan
+from .const import DEFAULT_NAME, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
