@@ -76,6 +76,20 @@ def test_entity_translation_keys_exist(platform: str, key: str) -> None:
     assert key in entities[platform], f"no strings for {platform}.{key}"
 
 
+@pytest.mark.parametrize("name", ["icon.png", "icon@2x.png", "logo.png", "logo@2x.png"])
+def test_brand_images_exist(name: str) -> None:
+    """Home Assistant shows local brand images from brand/ in the UI.
+
+    Without them a custom integration falls back to a generic placeholder.
+    """
+    path = COMPONENT / "brand" / name
+
+    assert path.is_file(), f"brand/{name} is missing"
+    assert path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n"), (
+        f"brand/{name} is not a PNG"
+    )
+
+
 def test_no_services_yaml() -> None:
     """Airflow is a fan preset mode, so the integration registers no services."""
     assert not (COMPONENT / "services.yaml").exists()
